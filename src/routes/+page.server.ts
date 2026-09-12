@@ -3,7 +3,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 
 export const load: PageServerLoad = async ({ locals }) => {
   if (!locals.auth.user) {
@@ -11,7 +11,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   }
 
   const problems = await db.query.problem.findMany({
-    where: eq(table.problem.homepage, true),
+    where: and(eq(table.problem.homepage, true), eq(table.problem.isPublic, true)),
     limit: 80, // only 80 at once
   });
 

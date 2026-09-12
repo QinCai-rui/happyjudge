@@ -20,7 +20,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   });
 
   if (!submission) error(404, 'Not found');
-  if (submission.userId !== locals.auth.user.id) error(404, 'Not found');
+  if (submission.userId !== locals.auth.user.id && !locals.auth.user.canAdmin) error(404, 'Not found');
 
   let languageName = submission.language;
   try {
@@ -35,6 +35,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
     submission: {
       id: submission.id,
       problemId: submission.problemId,
+      contestId: submission.contestId,
       userId: submission.userId,
       code: submission.code,
       language: languageName,
@@ -48,7 +49,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
           timeTaken: x.timeTaken,
           verdict: verdictToHumanName(x.verdict),
           // NO OUTPUT GIVEN (IF HIDDEN) AT ALL COSTS!! (maybe not _all_)
-          output: !!(await db.query.testcase.findFirst({ where: eq(table.testcase.id, x.id) }))?.isHidden
+          // Missing testcase rows default to hidden to avoid leaking output.
+          output: ((await db.query.testcase.findFirst({ where: eq(table.testcase.id, x.id) }))?.isHidden ?? true)
             ? null
             : x.output,
         })),

@@ -12,7 +12,7 @@ import { checkRateLimit } from '$lib/server/rate-limit';
 const SUBMIT_LIMIT = 10;
 const SUBMIT_WINDOW_MS = 60_000;
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, locals }) => {
   const { id } = params;
 
   const problem = await db.query.problem.findFirst({
@@ -21,9 +21,12 @@ export const load: PageServerLoad = async ({ params }) => {
 
   if (!problem) error(404, 'Not found');
 
-  // NOTE: problems are currently public. If problems should be private
-  // (contests, hidden groups), enforce authorization here before returning
-  // the statement/testcases — do not rely on UI hiding alone.
+  // Private (contest) problems are invisible by direct URL except to the
+  // author and admins. Participants must go through /contest/[id]/problem/[pid].
+  if (!problem.isPublic) {
+    const u = locals.auth.user;
+    if (!u || (!u.canAdmin && u.id !== problem.authorId)) error(404, 'Not found');
+  }
 
   let languages: { id: string; name: string }[] = [];
   try {
@@ -39,6 +42,12 @@ export const load: PageServerLoad = async ({ params }) => {
 export const actions = {
   submit: async ({ params, request, locals }) => {
     assertUserExists(locals.auth);
+
+    // Block direct submits to private problems — contest submits go through
+    // /contest/[id]/problem/[pid] so they are tagged + window-checked.
+    const target = await db.query.problem.findFirst({ where: eq(table.problem.id, params.id) });
+    if (!target) error(404, 'Problem not found');
+    if (!target.isPublic) error(403, 'Submit via the contest page');
 
     if (!checkRateLimit(`submit:${locals.auth.user.id}`, SUBMIT_LIMIT, SUBMIT_WINDOW_MS)) {
       return fail(429, { message: 'Too many submissions, slow down' });

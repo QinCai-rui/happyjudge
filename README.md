@@ -55,3 +55,33 @@ Notes:
   with per-job resource ceilings; see `codefort/README.md`.
 
 To update happyjudge, just run `git pull` in the directory that you cloned the source code in! **Note that happyjudge is designed to work with the latest version of codefort on the `main` branch!! If your happyjudge and codefort instances are out of sync, happyjudge may break!**
+
+## Running a contest (operator guide)
+
+1. Grant authoring rights: an admin opens `/admin/users` and ticks
+   `create` for each organizer (or `admin` for full access).
+2. Author problems: organizers open `/create/problem`, write the statement,
+   then add testcases under `/create/problem/[id]/testcases`.
+   Weights drive IOI partial scoring (best score per problem counts).
+3. Create the contest at `/contests` (title, window, optional
+   "release problems publicly when contest ends").
+4. On `/contest/[id]/manage`: add your own problems (they flip to private
+   automatically), invite participants by username, adjust timing.
+5. Migrate the DB after pulling new code (new tables are additive):
+   `docker compose --profile migrate run --rm migrate`.
+6. Test matrix before going live: pre-start invisibility (direct
+   `/problem/[id]` 404s for invitees), in-window submit via
+   `/contest/[id]/problem/[pid]`, late submit rejected (403), scoreboard
+   updates live, private-invite enforcement (non-invitees get 404).
+
+Demo seed (psql inside the compose network):
+
+```sql
+-- one demo contest with two private problems (adjust ids/timestamps)
+insert into contest (id, title, description, starts_at, ends_at, author_id, release_on_end)
+values ('demo1', 'Demo Contest', 'Practice', now() - interval '1 hour', now() + interval '2 hours',
+  (select id from "user" limit 1), false);
+insert into contest_problem (contest_id, problem_id, position, points)
+values ('demo1', '<problem-id-1>', 0, 100), ('demo1', '<problem-id-2>', 1, 100);
+update problem set is_public = false where id in ('<problem-id-1>', '<problem-id-2>');
+```

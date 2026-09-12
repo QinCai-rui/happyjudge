@@ -4,7 +4,7 @@ import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async (event) => {
   assertUserExists(event.locals.auth);
-  if (!event.locals.auth.user.canCreate) error(403);
+  if (!event.locals.auth.user.canCreate && !event.locals.auth.user.canAdmin) error(403);
 
   return {};
 };

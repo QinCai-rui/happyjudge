@@ -119,7 +119,13 @@ async function executeTestcases(submission: table.Submission, problem: table.Pro
   }
 }
 
-export default async function createSubmission(language: string, code: string, problemId: string, userId: string) {
+export default async function createSubmission(
+  language: string,
+  code: string,
+  problemId: string,
+  userId: string,
+  contestId?: string | null,
+) {
   if (Buffer.byteLength(code, 'utf8') > MAX_CODE_BYTES) {
     throw Object.assign(new Error(`Code too large (>${MAX_CODE_BYTES} bytes)`), { status: 413 });
   }
@@ -140,6 +146,7 @@ export default async function createSubmission(language: string, code: string, p
         language,
         code,
         userId,
+        contestId: contestId ?? null,
       })
       .returning()
   )[0];

@@ -1,5 +1,15 @@
 import { relations } from 'drizzle-orm';
-import { pgTable, pgEnum, text, timestamp, integer, serial, jsonb, boolean } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  pgEnum,
+  text,
+  timestamp,
+  integer,
+  serial,
+  jsonb,
+  boolean,
+  primaryKey,
+} from 'drizzle-orm/pg-core';
 
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
@@ -42,6 +52,7 @@ export const problem = pgTable('problem', {
   tags: jsonb('tags').$type<string[]>().notNull(),
   homepage: boolean('homepage').default(false).notNull(), // whether to show on homepage,
   displayGroup: text('display_group'), // if the problem should be shown in a collapsible group in the UI
+  isPublic: boolean('is_public').default(true).notNull(), // false = contest-private until released
 });
 
 export const problemRelations = relations(problem, ({ many }) => ({
@@ -92,6 +103,7 @@ export const submission = pgTable('submission', {
   language: text('language').notNull(),
   submittedAt: timestamp('submitted_at').defaultNow().notNull(),
   results: jsonb('results').$type<Result[]>().notNull().default([]), // type checks done in typescript, not postgres
+  contestId: text('contest_id').references(() => contest.id, { onDelete: 'set null' }),
 });
 
 export const submissionRelations = relations(submission, ({ one }) => ({
@@ -107,7 +119,62 @@ export const submissionRelations = relations(submission, ({ one }) => ({
 
 // TODO: Group
 
-// TODO: Contest
+export const contest = pgTable('contest', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  description: text('description').notNull().default(''),
+  startsAt: timestamp('starts_at', { withTimezone: true, mode: 'date' }).notNull(),
+  endsAt: timestamp('ends_at', { withTimezone: true, mode: 'date' }).notNull(),
+  authorId: text('author_id')
+    .notNull()
+    .references(() => user.id),
+  releaseOnEnd: boolean('release_on_end').default(false).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const contestRelations = relations(contest, ({ many }) => ({
+  problems: many(contestProblem),
+  participants: many(contestParticipant),
+}));
+
+export const contestProblem = pgTable(
+  'contest_problem',
+  {
+    contestId: text('contest_id')
+      .notNull()
+      .references(() => contest.id, { onDelete: 'cascade' }),
+    problemId: text('problem_id')
+      .notNull()
+      .references(() => problem.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull().default(0),
+    points: integer('points').notNull().default(100),
+  },
+  (t) => [primaryKey({ columns: [t.contestId, t.problemId] })],
+);
+
+export const contestProblemRelations = relations(contestProblem, ({ one }) => ({
+  contest: one(contest, { fields: [contestProblem.contestId], references: [contest.id] }),
+  problem: one(problem, { fields: [contestProblem.problemId], references: [problem.id] }),
+}));
+
+export const contestParticipant = pgTable(
+  'contest_participant',
+  {
+    contestId: text('contest_id')
+      .notNull()
+      .references(() => contest.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    registeredAt: timestamp('registered_at').defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.contestId, t.userId] })],
+);
+
+export const contestParticipantRelations = relations(contestParticipant, ({ one }) => ({
+  contest: one(contest, { fields: [contestParticipant.contestId], references: [contest.id] }),
+  user: one(user, { fields: [contestParticipant.userId], references: [user.id] }),
+}));
 
 export type Session = typeof session.$inferSelect;
 
@@ -120,3 +187,9 @@ export type Problem = typeof problem.$inferSelect;
 export type Testcase = typeof testcase.$inferSelect;
 
 export type Submission = typeof submission.$inferSelect;
+
+export type Contest = typeof contest.$inferSelect;
+
+export type ContestProblem = typeof contestProblem.$inferSelect;
+
+export type ContestParticipant = typeof contestParticipant.$inferSelect;

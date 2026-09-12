@@ -1,5 +1,6 @@
-import type { PageServerLoad, Actions } from './$types';
+import { redirect } from '@sveltejs/kit';
+import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({}) => {
-  return {};
+  return redirect(302, '/create/problem');
 };
