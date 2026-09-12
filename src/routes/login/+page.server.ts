@@ -4,7 +4,22 @@ import { eq } from 'drizzle-orm';
 import * as auth from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
+import { checkRateLimit } from '$lib/server/rate-limit';
 import type { Actions, PageServerLoad } from './$types';
+
+// Brute-force / enumeration throttle (single-process; use shared store for replicas).
+const AUTH_LIMIT = 20;
+const AUTH_WINDOW_MS = 60_000;
+
+function clientKey(event: Parameters<Actions['login']>[0], scope: string) {
+  let ip = 'unknown';
+  try {
+    ip = event.getClientAddress();
+  } catch {
+    // getClientAddress can throw behind some proxies; fall back to shared bucket.
+  }
+  return `auth:${scope}:${ip}`;
+}
 
 export const load: PageServerLoad = async (event) => {
   if (event.locals.auth.user) {
@@ -15,6 +30,9 @@ export const load: PageServerLoad = async (event) => {
 
 export const actions: Actions = {
   login: async (event) => {
+    if (!checkRateLimit(clientKey(event, 'login'), AUTH_LIMIT, AUTH_WINDOW_MS)) {
+      return fail(429, { message: 'Too many attempts, try again later' });
+    }
     const formData = await event.request.formData();
     const username = formData.get('username');
     const password = formData.get('password');
@@ -50,6 +68,9 @@ export const actions: Actions = {
     return redirect(302, '/');
   },
   register: async (event) => {
+    if (!checkRateLimit(clientKey(event, 'register'), AUTH_LIMIT, AUTH_WINDOW_MS)) {
+      return fail(429, { message: 'Too many attempts, try again later' });
+    }
     const formData = await event.request.formData();
     const username = formData.get('username');
     const password = formData.get('password');

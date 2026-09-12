@@ -1,87 +1,54 @@
-FROM oven/bun:1 as builder
+# Pinned digests: update intentionally (see `docker buildx imagetools inspect`).
+FROM oven/bun:1@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895 AS builder
 
 WORKDIR /app
 
-# Copy package.json and install dependencies
-COPY package.json bun.lockb* ./
+# Install dependencies first for better layer caching.
+# NOTE: repo uses `bun.lock` (text lockfile); do not use `bun.lockb*` here.
+COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
-# Copy the rest of the application
+# Copy the rest of the application (.dockerignore keeps secrets out of context).
 COPY . .
 
-# Create a modified codefort.ts for build time to avoid connection attempts
-RUN mkdir -p /app/src/lib/server/tmp
-RUN echo '// Mock codefort client for build\n\
-import { CODEFORT_URL } from "$env/static/private";\n\
-\n\
-async function getLanguages() {\n\
-  return [{ id: "javascript", name: "JavaScript" }];\n\
-}\n\
-\n\
-export const languages = await getLanguages();\n\
-\n\
-export async function execute(language, code, stdin, compileTimeout, compileMemoryLimit, runTimeout, runMemoryLimit) {\n\
-  return { exitCode: 0, stdout: "", stderr: "", stats: { compile: null, run: { realTime: 0 } } };\n\
-}' > /app/src/lib/server/tmp/mock-codefort.ts
-
-# Backup original file and use mock
-RUN cp /app/src/lib/server/codefort.ts /app/src/lib/server/codefort.ts.orig
-RUN cp /app/src/lib/server/tmp/mock-codefort.ts /app/src/lib/server/codefort.ts
-
-# Create .env file for build
-RUN echo "CODEFORT_URL=\"http://codefort:3000\"" > .env
-RUN echo "DATABASE_URL=\"postgres://happyjudge:happyjudge@postgres:5432/happyjudge\"" >> .env
-
-# Make sure SvelteKit processes the environment variables
+# Build the application. No secrets or DATABASE_URL are needed at build time:
+# - server code uses $env/dynamic/private (runtime env, not baked in)
+# - codefort language list is loaded lazily at request time, not at import
 RUN bun run prepare
-
-# Build the application
 RUN bun run build
 
-# Restore original codefort.ts
-RUN cp /app/src/lib/server/codefort.ts.orig /app/src/lib/server/codefort.ts
+# ---- Migration image: has devDependencies (drizzle-kit) + schema source ----
+# Used only by the `migrate` compose profile: `docker compose --profile migrate run --rm migrate`
+# It never runs the app and never ships to production.
+# --force is operator-approved here (explicit one-shot job), never automatic.
+FROM builder AS migrate
+CMD ["bun", "run", "db:push", "--force"]
 
-FROM oven/bun:1-slim as runner
-
-RUN apt-get update && apt-get install -y netcat-traditional && rm -rf /var/lib/apt/lists/*
+# ---- Production runtime: prod dependencies only, non-root ----
+FROM oven/bun:1-slim@sha256:cb3bbbb08e13a4a2ff400f24c7a2a1d5efa83f6ef8544d52d95a519631e2fc61 AS runner
 
 WORKDIR /app
 
-# Copy built application and necessary files from builder stage
-COPY --from=builder /app/build ./build
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/src/lib/server/codefort.ts ./src/lib/server/codefort.ts
-# Copy database schema and migration tools
-COPY --from=builder /app/src/lib/server/db ./src/lib/server/db
-COPY --from=builder /app/drizzle.config.ts ./
-
-# Set environment variables
 ENV NODE_ENV=production
 ENV PORT=3001
 
-# Push database schema
-ENV DATABASE_URL=postgres://happyjudge:happyjudge@postgres:5432/happyjudge
-RUN bun run db:push --force
+# Self-contained SvelteKit output.
+COPY --from=builder /app/build ./build
+COPY --from=builder /app/package.json /app/bun.lock ./
 
-RUN echo '#!/bin/sh\n\
-# Wait for PostgreSQL to be ready\n\
-until nc -z postgres 5432; do\n\
-  echo "Waiting for PostgreSQL to start..."\n\
-  sleep 1\n\
-done\n\
-\n\
-# Push database schema\n\
-echo "Initializing database schema..."\n\
-bun run db:push --force\n\
-\n\
-# Start the application\n\
-exec bun ./build' > /app/start.sh
+# Install ONLY production dependencies so dev tooling (vite, rollup,
+# drizzle-kit, ...) never ships to runtime.
+RUN bun install --production --frozen-lockfile && rm -rf /root/.bun/install/cache /tmp/*
 
-RUN chmod +x /app/start.sh
+# Drop privileges: never run as root.
+# (Debian slim has useradd, not adduser/addgroup.)
+RUN useradd -r -m -s /usr/sbin/nologin appuser \
+  && chown -R appuser:appuser /app
+USER appuser
 
-# Expose the port
 EXPOSE 3001
 
-# Run the startup script
-CMD ["/app/start.sh"]
+# NOTE: schema migrations are NOT run here. Run them explicitly via the
+# `migrate` target/service with a privileged MIGRATION_DATABASE_URL.
+# TLS is expected at the reverse proxy in front of this plain-HTTP service.
+CMD ["bun", "./build"]

@@ -1,0 +1,18 @@
+# Never send local secrets, VCS history, DB files, or build output to the daemon.
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+postgres_data/
+*.sql
+*.dump
+node_modules
+.svelte-kit
+/build
+.output
+Dockerfile
+docker-compose.yml
+README.md
+# Codefort subtree: built as its own compose service, not part of this image.
+codefort/

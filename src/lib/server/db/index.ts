@@ -3,8 +3,25 @@ import postgres from 'postgres';
 import * as schema from './schema';
 import { env } from '$env/dynamic/private';
 
-if (!env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
+// Lazily initialized so `vite build` (which imports server modules for
+// analysis/bundling without runtime env) does not throw or open connections.
+// The error surfaces only when a query actually runs without DATABASE_URL set.
+type Db = ReturnType<typeof drizzle<typeof schema>>;
 
-const client = postgres(env.DATABASE_URL);
+let cached: Db | null = null;
 
-export const db = drizzle(client, { schema });
+function getDb(): Db {
+  if (cached) return cached;
+  const url = env.DATABASE_URL;
+  if (!url) throw new Error('DATABASE_URL is not set');
+  const client = postgres(url);
+  cached = drizzle(client, { schema });
+  return cached;
+}
+
+// Preserve `db.query...`, `db.insert...` etc. call shapes.
+export const db: Db = new Proxy({} as Db, {
+  get(_target, prop, receiver) {
+    return Reflect.get(getDb(), prop, receiver);
+  },
+});

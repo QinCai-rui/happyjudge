@@ -1,36 +1,147 @@
+# Production compose: postgres + happyjudge + codefort (sandboxed executor).
+# Secrets are NEVER hardcoded here. Provide them via a `.env` file (see .env.example)
+# or environment. Required: POSTGRES_PASSWORD. Recommended: CODEFORT_TOKEN
+# (shared secret between happyjudge and the codefort service).
+#
+#   cp .env.example .env   # then edit POSTGRES_PASSWORD etc.
+#   docker compose build
+#   docker compose --profile migrate run --rm migrate   # schema migration (controlled job)
+#   docker compose up -d
+#
+# TLS is expected at the public reverse proxy in front of :3001.
+# To use an external Codefort instead of the bundled service, set
+# CODEFORT_URL=https://... (prefer authenticated HTTPS) + CODEFORT_TOKEN.
+
 services:
   happyjudge:
     build:
       context: .
       dockerfile: Dockerfile
+      target: runner
     ports:
-      - "3001:3001"
+      - '127.0.0.1:3001:3001'
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - CODEFORT_URL=http://codefort:3000
-      - DATABASE_URL=postgres://happyjudge:happyjudge@postgres:5432/happyjudge
+      # Private-network defaults; override in .env as needed.
+      - CODEFORT_URL=${CODEFORT_URL:-http://codefort:3000}
+      - CODEFORT_TOKEN=${CODEFORT_TOKEN:-}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-happyjudge}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-happyjudge}
+      - PORT=3001
+      - NODE_ENV=production
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      codefort:
+        condition: service_started
     restart: unless-stopped
-#    volumes:
-#      - ./.env:/app/.env:ro
-    networks:
-      - judge-network
+    cap_drop:
+      - ALL
+    # App needs no extra capabilities and no privileged ports.
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=128m
+    # NOTE: SvelteKit writes nothing persistent here; keep filesystem read-only.
+    # If you add uploads/caching, mount a dedicated volume instead of relaxing this.
 
   postgres:
-    image: postgres:16-alpine
-    ports:
-      - "5432:5432"
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    # No `ports:` — the database is reachable only inside the compose network.
+    # For local admin, use: docker compose exec postgres psql -U <user> <db>
+    env_file:
+      - path: .env
+        required: false
     environment:
-      - POSTGRES_USER=happyjudge
-      - POSTGRES_PASSWORD=happyjudge
-      - POSTGRES_DB=happyjudge
+      - POSTGRES_USER=${POSTGRES_USER:-happyjudge}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=${POSTGRES_DB:-happyjudge}
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data:rw
+      - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
-    networks:
-      - judge-network
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
 
-networks:
-  judge-network:
-    name: judge-network
-    external: true
+  # Sandboxed code execution, built from the `codefort/` subtree.
+  # Deliberately privileged: bubblewrap needs SYS_ADMIN + unconfined
+  # seccomp/apparmor to create sandbox namespaces. Containment comes from
+  # elsewhere: private compose network, no published ports, optional
+  # CODEFORT_TOKEN auth on POST /v1/run, and strict resource limits.
+  # The happyjudge app intentionally only `service_started`-depends on this:
+  # judging degrades to 503s when codefort is down, but the rest stays up.
+  codefort:
+    build:
+      context: ./codefort
+      dockerfile: Dockerfile
+    # No `ports:` — reachable only as http://codefort:3000 inside the network.
+    # For local debugging: docker compose exec codefort bun -e "..." (no shell published).
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Shared secret with happyjudge (it sends `Authorization: Bearer ...`).
+      # Empty = open API: only acceptable on this private network.
+      - CODEFORT_TOKEN=${CODEFORT_TOKEN:-}
+      - PORT=3000
+      - NODE_ENV=production
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN # bubblewrap namespaces for the sandbox
+      - NET_ADMIN # bubblewrap needs lo (loopback) inside the sandbox netns
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+    mem_limit: 0.5g
+    cpus: '0.50'
+    pids_limit: 250
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          'fetch("http://127.0.0.1:3000/v1/languages").then((r)=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # Controlled migration job — run explicitly, never automatically on app start:
+  #   docker compose --profile migrate run --rm migrate
+  # Uses MIGRATION_DATABASE_URL when set (privileged owner role); falls back to
+  # DATABASE_URL construction otherwise. The app runtime role should ideally be
+  # a restricted role without DDL; see README / docs.
+  migrate:
+    profiles: ['migrate']
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - DATABASE_URL=${MIGRATION_DATABASE_URL:-postgres://${POSTGRES_USER:-happyjudge}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-happyjudge}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    cap_drop:
+      - ALL
+    # No ports, no restart: one-shot job.
+
+volumes:
+  postgres_data:
+# NOTE: default private compose network is used (no external shared network),
+# so only these three services can reach each other.

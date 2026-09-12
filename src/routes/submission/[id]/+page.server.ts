@@ -5,7 +5,7 @@ import * as table from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { assertUserExists } from '$lib/server/assertion';
 import { verdictToHumanName } from '$lib/utils';
-import { languages } from '$lib/server/codefort';
+import { getLanguages } from '$lib/server/codefort';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
   assertUserExists(locals.auth);
@@ -22,13 +22,22 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   if (!submission) error(404, 'Not found');
   if (submission.userId !== locals.auth.user.id) error(404, 'Not found');
 
+  let languageName = submission.language;
+  try {
+    const languages = await getLanguages();
+    languageName = languages.find((x) => x.id === submission.language)?.name || submission.language; // in case a language was removed
+  } catch (e) {
+    console.error('Failed to load Codefort languages:', e);
+    // Fall back to raw language id; judging already happened.
+  }
+
   return {
     submission: {
       id: submission.id,
       problemId: submission.problemId,
       userId: submission.userId,
       code: submission.code,
-      language: languages.find((x) => x.id === submission.language)?.name || submission.language, // in case a language was removed
+      language: languageName,
       submittedAt: submission.submittedAt,
       results: await Promise.all(
         submission.results.map(async (x) => ({
