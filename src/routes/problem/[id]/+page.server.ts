@@ -77,9 +77,9 @@ export const actions = {
     }
     if (!language || !languages.find((x) => x.id === language)) error(400, 'Invalid language');
 
+    let submission;
     try {
-      const submission = await createSubmission(language, code, params.id, locals.auth.user.id);
-      return redirect(303, '/submission/' + submission.id);
+      submission = await createSubmission(language, code, params.id, locals.auth.user.id);
     } catch (e) {
       const status =
         e && typeof e === 'object' && 'status' in e && typeof (e as { status: unknown }).status === 'number'
@@ -91,5 +91,6 @@ export const actions = {
       console.error('Submission failed:', e);
       return fail(500, { message: 'Failed to create submission' });
     }
+    return redirect(303, '/submission/' + submission.id);
   },
 } satisfies Actions;
