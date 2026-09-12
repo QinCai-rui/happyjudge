@@ -1,0 +1,6 @@
+{
+  "name": "C++ (GCC)",
+  "fileName": "code.cpp",
+  "compileScript": "./compile.bash",
+  "runScript": "./run.bash"
+}

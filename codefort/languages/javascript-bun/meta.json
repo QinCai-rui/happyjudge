@@ -1,0 +1,6 @@
+{
+  "name": "JavaScript (Bun)",
+  "fileName": "code.js",
+  "runScript": "./run.bash",
+  "neededDirs": []
+}
