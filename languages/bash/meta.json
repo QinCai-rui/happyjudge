@@ -1,0 +1,5 @@
+{
+  "name": "Bash",
+  "fileName": "code.bash",
+  "runScript": "./run.bash"
+}
