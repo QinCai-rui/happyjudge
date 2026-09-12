@@ -40,6 +40,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       username: users.find((u) => u.id === p.userId)?.username ?? p.userId,
     })),
     ownProblems,
+    isAdmin: locals.auth.user.canAdmin,
   };
 };
 
@@ -79,7 +80,8 @@ export const actions = {
     if (!contest) error(404, 'Not found');
     if (!(await isContestManager(contest, locals.auth.user))) error(403);
     const data = await request.formData();
-    const problemId = data.get('problemId')?.toString().trim() ?? '';
+    const manual = data.get('problemIdManual')?.toString().trim() ?? '';
+    const problemId = (manual || data.get('problemId')?.toString().trim() || '').trim();
     const points = Number(data.get('points'));
     if (!problemId) return fail(400, { message: 'Problem required' });
     if (!Number.isInteger(points) || points <= 0 || points > 10000)

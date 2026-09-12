@@ -59,17 +59,29 @@
         <li class="text-muted text-sm italic">No problems yet.</li>
       {/each}
     </ul>
-    <form method="POST" action="?/addProblem" class="mt-4 flex flex-wrap items-end gap-2">
-      <label class="text-sm">Problem
-        <select name="problemId" class="form-input">
-          {#each data.ownProblems as p}
-            <option value={p.id}>{p.title} ({p.id})</option>
-          {/each}
-        </select>
-      </label>
-      <label class="text-sm">Points <input name="points" type="number" value="100" min="1" max="10000" class="form-input w-24" /></label>
-      <button class="btn-primary">Add</button>
-    </form>
+    {#if data.ownProblems.length > 0 || data.isAdmin}
+      <form method="POST" action="?/addProblem" class="mt-4 flex flex-wrap items-end gap-2">
+        {#if data.ownProblems.length > 0}
+          <label class="text-sm">Problem
+            <select name="problemId" class="form-input">
+              {#each data.ownProblems as p}
+                <option value={p.id}>{p.title} ({p.id})</option>
+              {/each}
+            </select>
+          </label>
+        {/if}
+        {#if data.isAdmin}
+          <label class="text-sm"
+            >{data.ownProblems.length > 0 ? 'Or any problem ID' : 'Problem ID'}
+            <input name="problemIdManual" class="form-input" placeholder="paste problem id" /></label
+          >
+        {/if}
+        <label class="text-sm">Points <input name="points" type="number" value="100" min="1" max="10000" class="form-input w-24" /></label>
+        <button class="btn-primary">Add</button>
+      </form>
+    {:else}
+      <p class="mt-4 text-sm">You haven't authored any problems yet — <a class="underline" href="/create/problem">create one first</a>, then add it here.</p>
+    {/if}
     <p class="text-muted mt-2 text-xs">Adding a problem marks it private until release.</p>
   </div>
 
