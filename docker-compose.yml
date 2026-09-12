@@ -28,6 +28,11 @@ services:
       - CODEFORT_URL=${CODEFORT_URL:-http://codefort:3000}
       - CODEFORT_TOKEN=${CODEFORT_TOKEN:-}
       - DATABASE_URL=postgres://${POSTGRES_USER:-happyjudge}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-happyjudge}
+      # Public base URL of THIS app as opened in the browser. adapter-node
+      # defaults to https (it assumes a TLS proxy), so direct plain-HTTP
+      # access needs this set explicitly or all form POSTs 403. Behind a
+      # TLS proxy, set it to the public https:// URL instead.
+      - ORIGIN=${ORIGIN:-http://127.0.0.1:3001}
       - PORT=3001
       - NODE_ENV=production
     depends_on:
@@ -74,10 +79,14 @@ services:
       start_period: 10s
 
   # Sandboxed code execution, built from the `codefort/` subtree.
-  # Deliberately privileged: bubblewrap needs SYS_ADMIN + unconfined
-  # seccomp/apparmor to create sandbox namespaces. Containment comes from
-  # elsewhere: private compose network, no published ports, optional
-  # CODEFORT_TOKEN auth on POST /v1/run, and strict resource limits.
+  # Fully unprivileged by design: the container runs as nobody with ALL
+  # capabilities dropped, and each job gets a private user namespace
+  # (nobody->nobody) plus cap-drop ALL inside the jail. Unconfined
+  # seccomp/apparmor remain only because bubblewrap must create namespaces
+  # and mounts (blocked by Docker's default profiles).
+  # Containment layers: private compose network, no published ports,
+  # CODEFORT_TOKEN auth on POST /v1/run, per-job prlimit ceilings,
+  # API concurrency cap + rate limit, container mem/cpu/pid limits.
   # The happyjudge app intentionally only `service_started`-depends on this:
   # judging degrades to 503s when codefort is down, but the rest stays up.
   codefort:
@@ -96,9 +105,8 @@ services:
       - PORT=3000
       - NODE_ENV=production
     restart: unless-stopped
-    cap_add:
-      - SYS_ADMIN # bubblewrap namespaces for the sandbox
-      - NET_ADMIN # bubblewrap needs lo (loopback) inside the sandbox netns
+    cap_drop:
+      - ALL
     security_opt:
       - apparmor=unconfined
       - seccomp=unconfined

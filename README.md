@@ -50,8 +50,8 @@ Notes:
 - The app binds to `127.0.0.1:3001` as plain HTTP — put TLS termination
   (reverse proxy) at the public boundary.
 - The app runtime image contains only production dependencies and runs as
-  non-root user `appuser`. The codefort container stays privileged by design
-  (bubblewrap needs namespaces for the sandbox) and is contained by network
-  isolation, token auth, and strict memory/CPU/pid limits.
+  non-root user `appuser`. The codefort container is fully unprivileged too
+  (nobody, zero capabilities) — each execution gets a private user namespace
+  with per-job resource ceilings; see `codefort/README.md`.
 
 To update happyjudge, just run `git pull` in the directory that you cloned the source code in! **Note that happyjudge is designed to work with the latest version of codefort on the `main` branch!! If your happyjudge and codefort instances are out of sync, happyjudge may break!**

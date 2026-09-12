@@ -68,18 +68,32 @@ export async function invalidateSession(sessionId: string) {
   await db.delete(table.session).where(eq(table.session.id, sessionId));
 }
 
-export function setSessionTokenCookie(event: RequestEvent, token: string, expiresAt: Date) {
-  event.cookies.set(sessionCookieName, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    expires: expiresAt,
+function cookieAttributes(event: RequestEvent): {
+  path: '/';
+  sameSite: 'lax';
+  secure: boolean;
+} {
+  // Secure only when actually served over https (see setSessionTokenCookie).
+  // Deletion must mirror these or browsers may keep the cookie.
+  return {
     path: '/',
+    sameSite: 'lax',
+    secure: event.url.protocol === 'https:',
+  };
+}
+
+export function setSessionTokenCookie(event: RequestEvent, token: string, expiresAt: Date) {
+  // Secure only when actually served over https: a Secure cookie on plain
+  // http is silently dropped by browsers (except localhost), which would
+  // log users out in a redirect loop. event.url honors ORIGIN /
+  // X-Forwarded-Proto, so this tracks the public scheme correctly.
+  event.cookies.set(sessionCookieName, token, {
+    ...cookieAttributes(event),
+    httpOnly: true,
+    expires: expiresAt,
   });
 }
 
 export function deleteSessionTokenCookie(event: RequestEvent) {
-  event.cookies.delete(sessionCookieName, {
-    path: '/',
-  });
+  event.cookies.delete(sessionCookieName, cookieAttributes(event));
 }

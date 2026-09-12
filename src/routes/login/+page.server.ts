@@ -1,5 +1,5 @@
 import { encodeBase32LowerCase } from '@oslojs/encoding';
-import { fail, redirect } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import * as auth from '$lib/server/auth';
 import { db } from '$lib/server/db';
@@ -19,6 +19,23 @@ function clientKey(event: Parameters<Actions['login']>[0], scope: string) {
     // getClientAddress can throw behind some proxies; fall back to shared bucket.
   }
   return `auth:${scope}:${ip}`;
+}
+
+/** User lookup that turns infrastructure failure (e.g. unmigrated DB)
+ * into a 503 with an actionable server log instead of a cryptic 500. */
+async function findUserByUsername(username: string) {
+  try {
+    return await db.query.user.findFirst({
+      where: eq(table.user.username, username),
+    });
+  } catch (e) {
+    console.error(
+      'Database query failed. If this is a fresh deploy with "relation does not exist" errors, ' +
+        'the schema has not been migrated. Run: docker compose --profile migrate run --rm migrate',
+      e,
+    );
+    throw error(503, 'Service temporarily unavailable');
+  }
 }
 
 export const load: PageServerLoad = async (event) => {
@@ -48,9 +65,7 @@ export const actions: Actions = {
       });
     }
 
-    const existingUser = await db.query.user.findFirst({
-      where: eq(table.user.username, username),
-    });
+    const existingUser = await findUserByUsername(username);
 
     if (!existingUser) {
       return fail(400, { message: 'Incorrect username or password' });
@@ -82,20 +97,19 @@ export const actions: Actions = {
       return fail(400, { message: 'Invalid password' });
     }
 
-    if (
-      await db.query.user.findFirst({
-        where: eq(table.user.username, username),
-      })
-    ) {
-      return fail(400, { message: 'Username taken' });
-    }
-
+    // Hash BEFORE the taken-check so response timing doesn't reveal whether
+    // a username exists, and report taken names with the same neutral message
+    // as malformed ones (usernames aren't shown publicly anywhere).
     const userId = generateUserId();
     const passwordHash = await Bun.password.hash(password, {
       algorithm: 'argon2id',
       memoryCost: 19456,
       timeCost: 2,
     });
+
+    if (await findUserByUsername(username)) {
+      return fail(400, { message: 'Invalid username' });
+    }
 
     try {
       await db.insert(table.user).values({ id: userId, username, passwordHash });
@@ -104,7 +118,10 @@ export const actions: Actions = {
       const session = await auth.createSession(sessionToken, userId);
       auth.setSessionTokenCookie(event, sessionToken, session.expiresAt);
     } catch (e) {
-      console.error(e);
+      console.error(
+        'Database insert failed. If relations are missing, run: docker compose --profile migrate run --rm migrate',
+        e,
+      );
       return fail(500, { message: 'An error has occurred' });
     }
     return redirect(302, '/');
