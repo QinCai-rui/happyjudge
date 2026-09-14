@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { ActionData, PageServerData } from './$types';
 
   let { data, form }: { data: PageServerData; form: ActionData } = $props();
@@ -9,6 +10,19 @@
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
   };
+  let startsAtInput: HTMLInputElement;
+  let endsAtInput: HTMLInputElement;
+
+  onMount(() => {
+    startsAtInput.value = toLocal(c.startsAt);
+    endsAtInput.value = toLocal(c.endsAt);
+  });
+
+  function syncUtcDate(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const utcInput = document.getElementById(`${input.id}Utc`) as HTMLInputElement;
+    utcInput.value = new Date(input.value).toISOString();
+  }
 </script>
 
 <svelte:head>
@@ -33,19 +47,30 @@
     </div>
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div>
-        <label class="form-label" for="startsAt">Starts at</label>
+        <label class="form-label" for="startsAtLocal">Starts at</label>
+        <input id="startsAtUtc" name="startsAt" type="hidden" value={new Date(c.startsAt).toISOString()} />
         <input
           class="form-input"
-          id="startsAt"
-          name="startsAt"
+          id="startsAtLocal"
           type="datetime-local"
           value={toLocal(c.startsAt)}
+          bind:this={startsAtInput}
+          oninput={syncUtcDate}
           required
         />
       </div>
       <div>
-        <label class="form-label" for="endsAt">Ends at</label>
-        <input class="form-input" id="endsAt" name="endsAt" type="datetime-local" value={toLocal(c.endsAt)} required />
+        <label class="form-label" for="endsAtLocal">Ends at</label>
+        <input id="endsAtUtc" name="endsAt" type="hidden" value={new Date(c.endsAt).toISOString()} />
+        <input
+          class="form-input"
+          id="endsAtLocal"
+          type="datetime-local"
+          value={toLocal(c.endsAt)}
+          bind:this={endsAtInput}
+          oninput={syncUtcDate}
+          required
+        />
       </div>
     </div>
     <label class="flex items-center gap-2 text-sm"
