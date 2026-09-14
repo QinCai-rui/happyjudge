@@ -21,6 +21,8 @@ export const load: PageServerLoad = async ({ locals }) => {
       where: eq(table.contestEditor.userId, me.id),
     });
     const byId = new Map();
+    const publicContests = await db.query.contest.findMany({ where: eq(table.contest.isPublic, true) });
+    for (const contest of publicContests) byId.set(contest.id, contest);
     for (const o of own) byId.set(o.id, o);
     const ids = [...parts.map((p) => p.contestId), ...editorGrants.map((e) => e.contestId)];
     if (ids.length) {
@@ -46,23 +48,21 @@ export const actions = {
     const startsAt = new Date(data.get('startsAt')?.toString() ?? '');
     const endsAt = new Date(data.get('endsAt')?.toString() ?? '');
     const releaseOnEnd = data.get('releaseOnEnd') === 'on';
+    const isPublic = data.get('isPublic') === 'on';
     if (title.length < 3 || title.length > 120) return fail(400, { message: 'Title 3–120 chars' });
     if (isNaN(+startsAt) || isNaN(+endsAt)) return fail(400, { message: 'Invalid dates' });
     if (+endsAt <= +startsAt) return fail(400, { message: 'End must be after start' });
     const id = generateContestId();
-    await db.transaction(async (tx) => {
-      await tx.insert(table.contest).values({
-        id,
-        title,
-        description,
-        startsAt,
-        endsAt,
-        inviteToken: generateInviteToken(),
-        authorId: user.id,
-        releaseOnEnd,
-      });
-      // Author is implicitly a participant/manager; add invite for themselves.
-      await tx.insert(table.contestParticipant).values({ contestId: id, userId: user.id });
+    await db.insert(table.contest).values({
+      id,
+      title,
+      description,
+      startsAt,
+      endsAt,
+      inviteToken: generateInviteToken(),
+      authorId: user.id,
+      isPublic,
+      releaseOnEnd,
     });
     return redirect(303, `/contest/${id}/manage`);
   },

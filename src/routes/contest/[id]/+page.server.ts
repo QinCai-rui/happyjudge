@@ -4,7 +4,13 @@ import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { assertUserExists } from '$lib/server/assertion';
-import { canViewContest, contestStatus, isContestManager, maybeReleaseContest } from '$lib/server/contests';
+import {
+  canViewContest,
+  contestStatus,
+  isContestManager,
+  isContestParticipant,
+  maybeReleaseContest,
+} from '$lib/server/contests';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
   assertUserExists(locals.auth);
@@ -16,6 +22,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
   const status = contestStatus(contest);
   const manager = await isContestManager(contest, locals.auth.user);
+  const isParticipant = await isContestParticipant(contest.id, locals.auth.user.id);
 
   const links =
     status === 'upcoming' && !manager
@@ -39,5 +46,19 @@ export const load: PageServerLoad = async ({ params, locals }) => {
     pointsByProblem: Object.fromEntries(links.map((l) => [l.problemId, l.points])),
     participantCount: participants.length,
     isManager: manager,
+    isParticipant,
   };
+};
+
+export const actions = {
+  join: async ({ params, locals }) => {
+    assertUserExists(locals.auth);
+    const contest = await db.query.contest.findFirst({ where: eq(table.contest.id, params.id) });
+    if (!contest) error(404, 'Not found');
+    if (!contest.isPublic || contest.authorId === locals.auth.user.id) error(404, 'Not found');
+    await db
+      .insert(table.contestParticipant)
+      .values({ contestId: contest.id, userId: locals.auth.user.id })
+      .onConflictDoNothing();
+  },
 };

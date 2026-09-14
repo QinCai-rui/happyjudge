@@ -113,12 +113,13 @@ export const actions = {
     const startsAt = new Date(data.get('startsAt')?.toString() ?? '');
     const endsAt = new Date(data.get('endsAt')?.toString() ?? '');
     const releaseOnEnd = data.get('releaseOnEnd') === 'on';
+    const isPublic = data.get('isPublic') === 'on';
     if (title.length < 3 || title.length > 120) return fail(400, { message: 'Title 3–120 chars' });
     if (isNaN(+startsAt) || isNaN(+endsAt)) return fail(400, { message: 'Invalid dates' });
     if (+endsAt <= +startsAt) return fail(400, { message: 'End must be after start' });
     await db
       .update(table.contest)
-      .set({ title, description, startsAt, endsAt, releaseOnEnd })
+      .set({ title, description, startsAt, endsAt, isPublic, releaseOnEnd })
       .where(eq(table.contest.id, params.id));
     // Auto-release only when no linked contest is still active.
     if (releaseOnEnd && new Date() > endsAt) await maybeReleaseContest({ ...contest, endsAt, releaseOnEnd });
@@ -192,6 +193,7 @@ export const actions = {
     const invited = await db.query.user.findFirst({ where: eq(table.user.username, username) });
     // Neutral response in both cases to avoid user enumeration.
     if (!invited) return { message: 'If that user exists, they were invited.' };
+    if (invited.id === contest.authorId) return { message: 'If that user exists, they were invited.' };
     await db
       .insert(table.contestParticipant)
       .values({ contestId: params.id, userId: invited.id })
@@ -205,7 +207,6 @@ export const actions = {
     if (!(await isContestManager(contest, locals.auth.user))) error(403);
     const data = await request.formData();
     const userId = data.get('userId')?.toString() ?? '';
-    if (userId === contest.authorId) return fail(400, { message: 'Cannot remove the author' });
     await db
       .delete(table.contestParticipant)
       .where(and(eq(table.contestParticipant.contestId, params.id), eq(table.contestParticipant.userId, userId)));

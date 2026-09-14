@@ -182,6 +182,42 @@ curl -sS "$HJ/api/submissions/SUBMISSION_ID" -H "authorization: Bearer $TOKEN"
 curl -sS "$HJ/api/contests/CONTEST_ID/scoreboard" -H "authorization: Bearer $TOKEN"
 ```
 
+The scoreboard response includes one ordered cell per problem and ranks by score
+then time taken to obtain the final contributing best score. This time is the
+latest `bestAt` elapsed from the contest start, not a sum across problems.
+`per` remains available for compatibility and is equivalent to
+`cells.map(cell => cell.score)`, but is deprecated.
+
+```json
+{
+  "data": {
+    "problems": [{ "problemId": "p1", "title": "Warmup", "points": 100, "position": 1 }],
+    "rows": [
+      {
+        "userId": "user_1",
+        "username": "alice",
+        "cells": [
+          {
+            "problemId": "p1",
+            "score": 100,
+            "attempts": 3,
+            "bestIndex": 3,
+            "bestAt": "2026-09-14T10:03:00.000Z",
+            "isFull": true,
+            "hasPending": false,
+            "isAttempted": true
+          }
+        ],
+        "per": [100],
+        "total": 100,
+        "totalTimeSecs": 180,
+        "rank": 1
+      }
+    ]
+  }
+}
+```
+
 Run code with arbitrary input without creating a submission or affecting a
 scoreboard. This uses the same language validation, execution limits, and
 bounded queue as judging:

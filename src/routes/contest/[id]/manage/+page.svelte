@@ -49,6 +49,10 @@
       </div>
     </div>
     <label class="flex items-center gap-2 text-sm"
+      ><input type="checkbox" name="isPublic" checked={c.isPublic} class="checkbox" /> Public contest: anyone logged in can
+      view and join</label
+    >
+    <label class="flex items-center gap-2 text-sm"
       ><input type="checkbox" name="releaseOnEnd" checked={c.releaseOnEnd} class="checkbox" /> Release problems publicly
       when contest ends</label
     >

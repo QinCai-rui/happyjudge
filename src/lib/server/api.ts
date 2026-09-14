@@ -126,6 +126,7 @@ export function serializeContest(contest: table.Contest, includeInvite = false) 
     description: contest.description,
     startsAt: contest.startsAt,
     endsAt: contest.endsAt,
+    isPublic: contest.isPublic,
     releaseOnEnd: contest.releaseOnEnd,
     authorId: contest.authorId,
     createdAt: contest.createdAt,
@@ -154,6 +155,7 @@ export async function requireContestOwner(event: RequestEvent, contest: table.Co
 
 export async function requireContestViewer(event: RequestEvent, contest: table.Contest) {
   const user = await requireUser(event);
+  if (contest.isPublic) return user;
   if (!(await isContestManager(contest, user))) {
     const participant = await db.query.contestParticipant.findFirst({
       where: and(eq(table.contestParticipant.contestId, contest.id), eq(table.contestParticipant.userId, user.id)),
@@ -218,7 +220,7 @@ export function validateProblemInput(body: Record<string, unknown>, partial = fa
 
 export function validateDates(body: Record<string, unknown>, partial = false) {
   const result: Record<string, unknown> = {};
-  for (const key of ['title', 'description']) if (key in body) result[key] = body[key];
+  for (const key of ['title', 'description', 'isPublic']) if (key in body) result[key] = body[key];
   for (const key of ['startsAt', 'endsAt']) if (key in body) result[key] = new Date(String(body[key]));
   if ('releaseOnEnd' in body) result.releaseOnEnd = body.releaseOnEnd;
   if (!partial && (!('title' in body) || !('startsAt' in body) || !('endsAt' in body)))
@@ -238,6 +240,8 @@ export function validateDates(body: Record<string, unknown>, partial = false) {
     throw new ApiError(400, 'endsAt must be after startsAt', 'validation_error');
   if ('releaseOnEnd' in result && typeof result.releaseOnEnd !== 'boolean')
     throw new ApiError(400, 'releaseOnEnd must be boolean', 'validation_error');
+  if ('isPublic' in result && typeof result.isPublic !== 'boolean')
+    throw new ApiError(400, 'isPublic must be boolean', 'validation_error');
   return result;
 }
 

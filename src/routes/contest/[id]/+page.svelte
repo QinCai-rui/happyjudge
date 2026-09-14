@@ -53,11 +53,15 @@
   <h1 class="mt-4 text-3xl font-bold tracking-tight">{c.title}</h1>
   {#if c.description}<p class="text-muted mt-2 max-w-prose whitespace-pre-wrap">{c.description}</p>{/if}
   <p class="text-muted mt-2 text-sm">
-    {data.participantCount} participant(s) · all-or-nothing subtasks · live scoreboard
+    {data.participantCount} participant(s) · {c.isPublic ? 'public' : 'private invite-only'} · all-or-nothing subtasks ·
+    live scoreboard
   </p>
 
   <div class="mt-4 flex flex-wrap gap-2">
     <a class="btn-primary" href={`/contest/${c.id}/scoreboard`}>Scoreboard</a>
+    {#if c.isPublic && !data.isManager && !data.isParticipant}
+      <form method="POST" action="?/join"><button class="btn-primary">Join contest</button></form>
+    {/if}
     {#if data.isManager}
       <a class="btn-ghost" href={`/contest/${c.id}/manage`}>Manage</a>
     {/if}

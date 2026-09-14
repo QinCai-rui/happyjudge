@@ -137,6 +137,7 @@ export const contest = pgTable('contest', {
   authorId: text('author_id')
     .notNull()
     .references(() => user.id),
+  isPublic: boolean('is_public').default(false).notNull(),
   releaseOnEnd: boolean('release_on_end').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

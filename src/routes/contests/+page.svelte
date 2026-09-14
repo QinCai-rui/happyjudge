@@ -11,7 +11,7 @@
 <div class="mx-auto max-w-4xl">
   <h1 class="text-3xl font-bold tracking-tight">Contests</h1>
   <p class="text-muted mt-1 text-sm">
-    Private invite-only contests. You only see contests you're invited to, author, or editor.
+    Public contests are open to all logged-in users. Private contests require an invite.
   </p>
 
   <div class="mt-6 grid gap-4 sm:grid-cols-2">
@@ -24,6 +24,7 @@
         <p class="text-muted mt-1 text-sm">
           {new Date(c.startsAt).toLocaleString()} → {new Date(c.endsAt).toLocaleString()}
         </p>
+        <p class="text-muted mt-1 text-xs">{c.isPublic ? 'Public' : 'Private invite-only'}</p>
       </a>
     {:else}
       <p class="text-muted text-sm italic sm:col-span-2">
@@ -67,6 +68,9 @@
           <input class="form-input" id="endsAt" name="endsAt" type="datetime-local" required />
         </div>
       </div>
+      <label class="flex items-center gap-2 text-sm"
+        ><input type="checkbox" name="isPublic" class="checkbox" /> Public contest: anyone logged in can view and join</label
+      >
       <label class="flex items-center gap-2 text-sm"
         ><input type="checkbox" name="releaseOnEnd" class="checkbox" /> Release problems publicly when contest ends</label
       >

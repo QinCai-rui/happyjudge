@@ -20,7 +20,11 @@ export const POST = (event) =>
       throw new ApiError(429, 'Too many attempts, try again later', 'rate_limited');
     const body = await readJson<Body>(event, 16 * 1024);
     if (typeof body.username !== 'string' || !/^[a-z0-9_-]{3,20}$/.test(body.username))
-      throw new ApiError(400, 'Invalid username', 'validation_error');
+      throw new ApiError(
+        400,
+        'Username must be 3-20 lowercase letters, numbers, underscores, or hyphens',
+        'validation_error',
+      );
     if (typeof body.password !== 'string' || body.password.length < 6 || body.password.length > 255)
       throw new ApiError(400, 'Invalid password', 'validation_error');
     const passwordHash = await Bun.password.hash(body.password, {

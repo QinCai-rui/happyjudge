@@ -30,5 +30,6 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       })),
       rows: board.rows,
     },
+    currentUserId: locals.auth.user.id,
   };
 };

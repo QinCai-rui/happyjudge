@@ -34,7 +34,7 @@ export const POST = (event) =>
       throw new ApiError(400, 'username is required', 'validation_error');
     const invited = await db.query.user.findFirst({ where: eq(table.user.username, body.username.trim()) });
     // Do not turn this endpoint into a username enumeration oracle.
-    if (invited)
+    if (invited && invited.id !== contest.authorId)
       await db
         .insert(table.contestParticipant)
         .values({ contestId: contest.id, userId: invited.id })

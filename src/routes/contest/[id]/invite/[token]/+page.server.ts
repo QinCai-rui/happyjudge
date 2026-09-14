@@ -23,6 +23,7 @@ export const actions = {
       where: and(eq(table.contest.id, params.id), eq(table.contest.inviteToken, params.token)),
     });
     if (!contest) error(404, 'Invite link is invalid or expired');
+    if (contest.authorId === locals.auth.user.id) return redirect(303, `/contest/${contest.id}`);
     await db
       .insert(table.contestParticipant)
       .values({ contestId: contest.id, userId: locals.auth.user.id })

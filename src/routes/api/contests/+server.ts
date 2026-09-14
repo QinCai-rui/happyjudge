@@ -27,13 +27,12 @@ export const GET = (event) =>
     });
     const editorGrants = await db.query.contestEditor.findMany({ where: eq(table.contestEditor.userId, user.id) });
     const editorIds = new Set(editorGrants.map((grant) => grant.contestId));
-    const ids = [...participating.map((p) => p.contestId), ...editorGrants.map((grant) => grant.contestId)].filter(
-      (id) => !own.some((c) => c.id === id),
-    );
+    const ids = [...participating.map((p) => p.contestId), ...editorGrants.map((grant) => grant.contestId)];
+    const publicContests = await db.query.contest.findMany({ where: eq(table.contest.isPublic, true), limit: 100 });
     const joined = ids.length
       ? await db.query.contest.findMany({ where: (c, { inArray }) => inArray(c.id, ids), limit: 100 })
       : [];
-    const all = [...own, ...joined];
+    const all = [...new Map([...own, ...joined, ...publicContests].map((contest) => [contest.id, contest])).values()];
     return apiData(
       all
         .sort((a, b) => +b.startsAt - +a.startsAt)
@@ -58,9 +57,9 @@ export const POST = (event) =>
       endsAt: details.endsAt as Date,
       inviteToken: generateInviteToken(),
       authorId: user.id,
+      isPublic: Boolean(details.isPublic ?? false),
       releaseOnEnd: Boolean(details.releaseOnEnd ?? false),
     };
     await db.insert(table.contest).values(contest);
-    await db.insert(table.contestParticipant).values({ contestId: id, userId: user.id });
     return apiData(serializeContest({ ...contest, createdAt: new Date() }, true), 201);
   }, event);
