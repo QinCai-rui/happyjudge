@@ -5,6 +5,7 @@ import * as table from '$lib/server/db/schema';
 import { desc, eq } from 'drizzle-orm';
 import { assertUserExists } from '$lib/server/assertion';
 import { slugifyProblemId } from '$lib/server/contests';
+import { parseSamples } from '$lib/server/validation';
 
 export const load: PageServerLoad = async ({ locals }) => {
   assertUserExists(locals.auth);
@@ -15,16 +16,6 @@ export const load: PageServerLoad = async ({ locals }) => {
   });
   return { problems: mine, user: locals.auth.user };
 };
-
-function parseSamples(raw: string): { input: string; output: string }[] {
-  if (!raw.trim()) return [];
-  const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed)) throw new Error('bad samples');
-  for (const s of parsed) {
-    if (typeof s?.input !== 'string' || typeof s?.output !== 'string') throw new Error('bad samples');
-  }
-  return parsed;
-}
 
 export const actions = {
   create: async ({ request, locals }) => {
@@ -52,7 +43,7 @@ export const actions = {
       return fail(400, { message: 'Memory limit 16–2048 MB' });
     let samples: { input: string; output: string }[];
     try {
-      samples = parseSamples(samplesRaw);
+      samples = samplesRaw.trim() ? parseSamples(samplesRaw) : [];
     } catch {
       return fail(400, { message: 'Samples must be JSON: [{"input":"..","output":".."}]' });
     }

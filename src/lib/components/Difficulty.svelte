@@ -5,14 +5,15 @@
 </script>
 
 <span
-  class={'flex h-8 items-center justify-center rounded-full px-6 py-2 text-center shadow-sm ' +
+  class={'inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-bold capitalize ring-1 ring-inset ' +
     (difficulty === 'easy'
-      ? 'bg-green-400'
+      ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-950 dark:text-emerald-300'
       : difficulty === 'medium'
-        ? 'bg-yellow-400'
+        ? 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-950 dark:text-amber-300'
         : difficulty === 'hard'
-          ? 'bg-red-400'
+          ? 'bg-orange-50 text-orange-700 ring-orange-600/20 dark:bg-orange-950 dark:text-orange-300'
           : difficulty === 'expert'
-            ? 'bg-red-600 text-white'
-            : 'bg-red-800 text-white')}>{difficulty}</span
+            ? 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-950 dark:text-rose-300'
+            : 'bg-violet-50 text-violet-700 ring-violet-600/20 dark:bg-violet-950 dark:text-violet-300')}
+  >{difficulty}</span
 >

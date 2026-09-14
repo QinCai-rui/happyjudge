@@ -40,6 +40,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       code: submission.code,
       language: languageName,
       submittedAt: submission.submittedAt,
+      scoringVersion: submission.scoringVersion,
       results: await Promise.all(
         submission.results.map(async (x) => ({
           caseGroup: x.caseGroup,
@@ -50,9 +51,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
           verdict: verdictToHumanName(x.verdict),
           // NO OUTPUT GIVEN (IF HIDDEN) AT ALL COSTS!! (maybe not _all_)
           // Missing testcase rows default to hidden to avoid leaking output.
-          output: ((await db.query.testcase.findFirst({ where: eq(table.testcase.id, x.id) }))?.isHidden ?? true)
-            ? null
-            : x.output,
+          output:
+            ((await db.query.testcase.findFirst({ where: eq(table.testcase.id, x.id) }))?.isHidden ?? true)
+              ? null
+              : x.output,
         })),
       ),
       problem: submission.problem,

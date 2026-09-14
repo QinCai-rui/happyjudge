@@ -34,11 +34,29 @@
       </div>
       <div>
         <label class="form-label" for="timeLimit">Time limit (ms)</label>
-        <input class="form-input" id="timeLimit" name="timeLimit" type="number" value={p.timeLimit} min="250" max="15000" required />
+        <input
+          class="form-input"
+          id="timeLimit"
+          name="timeLimit"
+          type="number"
+          value={p.timeLimit}
+          min="250"
+          max="15000"
+          required
+        />
       </div>
       <div>
         <label class="form-label" for="memoryLimit">Memory (MB)</label>
-        <input class="form-input" id="memoryLimit" name="memoryLimit" type="number" value={p.memoryLimit} min="16" max="2048" required />
+        <input
+          class="form-input"
+          id="memoryLimit"
+          name="memoryLimit"
+          type="number"
+          value={p.memoryLimit}
+          min="16"
+          max="2048"
+          required
+        />
       </div>
     </div>
     <div>
@@ -47,7 +65,9 @@
     </div>
     <div>
       <label class="form-label" for="samples">Sample testcases (JSON)</label>
-      <textarea class="form-input font-mono" id="samples" name="samples" rows="3">{JSON.stringify(p.sampleTestcases)}</textarea>
+      <textarea class="form-input font-mono" id="samples" name="samples" rows="3"
+        >{JSON.stringify(p.sampleTestcases)}</textarea
+      >
     </div>
     <div>
       <label class="form-label" for="tags">Tags (comma separated)</label>
@@ -58,9 +78,19 @@
       <input class="form-input" id="displayGroup" name="displayGroup" value={p.displayGroup ?? ''} />
     </div>
     <div class="flex flex-wrap gap-6">
-      <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="isPublic" checked={p.isPublic} class="checkbox" /> Public problem</label>
+      <label class="flex items-center gap-2 text-sm"
+        ><input
+          type="checkbox"
+          name="isPublic"
+          checked={p.isPublic}
+          class="checkbox"
+          disabled={!data.canEditVisibility}
+        /> Public problem</label
+      >
       {#if data.user?.canAdmin}
-        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="homepage" checked={p.homepage} class="checkbox" /> Show on homepage</label>
+        <label class="flex items-center gap-2 text-sm"
+          ><input type="checkbox" name="homepage" checked={p.homepage} class="checkbox" /> Show on homepage</label
+        >
       {/if}
     </div>
     {#if form?.message}<p class={form.message === 'Saved.' ? 'form-success' : 'form-error'}>{form.message}</p>{/if}
@@ -69,7 +99,14 @@
     </div>
   </form>
 
-  <form method="POST" action="?/remove" class="mt-6" onsubmit={(e) => { if (!confirm('Delete this problem?')) e.preventDefault(); }}>
+  <form
+    method="POST"
+    action="?/remove"
+    class="mt-6"
+    onsubmit={(e) => {
+      if (!confirm('Delete this problem?')) e.preventDefault();
+    }}
+  >
     <button class="btn-danger">Delete problem</button>
   </form>
 </div>

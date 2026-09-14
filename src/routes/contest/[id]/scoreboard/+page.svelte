@@ -10,8 +10,10 @@
 
 <div class="mx-auto max-w-5xl">
   <a class="btn-ghost text-sm" href={`/contest/${data.contest.id}`}>← {data.contest.title}</a>
-  <h1 class="mt-2 text-3xl font-bold tracking-tight">Scoreboard <span class="badge" data-status={data.contest.status}>{data.contest.status}</span></h1>
-  <p class="text-muted mt-1 text-sm">IOI partial scoring · always live · best score per problem counts.</p>
+  <h1 class="mt-2 text-3xl font-bold tracking-tight">
+    Scoreboard <span class="badge" data-status={data.contest.status}>{data.contest.status}</span>
+  </h1>
+  <p class="text-muted mt-1 text-sm">All-or-nothing subtasks · always live · best score per problem counts.</p>
 
   <div class="card mt-6 overflow-x-auto p-0">
     <table class="scoreboard">
@@ -36,7 +38,11 @@
             <td class="font-bold">{r.total}</td>
           </tr>
         {:else}
-          <tr><td colspan={data.board.problems.length + 3} class="text-muted p-6 text-center italic">No participants yet.</td></tr>
+          <tr
+            ><td colspan={data.board.problems.length + 3} class="text-muted p-6 text-center italic"
+              >No participants yet.</td
+            ></tr
+          >
         {/each}
       </tbody>
     </table>

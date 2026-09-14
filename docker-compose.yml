@@ -27,7 +27,9 @@ services:
       # Private-network defaults; override in .env as needed.
       - CODEFORT_URL=${CODEFORT_URL:-http://codefort:3000}
       - CODEFORT_TOKEN=${CODEFORT_TOKEN:-}
-      - DATABASE_URL=postgres://${POSTGRES_USER:-happyjudge}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-happyjudge}
+      - DATABASE_URL=postgres://happyjudge_app:${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-happyjudge}
+      - ADDRESS_HEADER=x-forwarded-for
+      - XFF_DEPTH=1
       # Public base URL of THIS app as opened in the browser. adapter-node
       # defaults to https (it assumes a TLS proxy), so direct plain-HTTP
       # access needs this set explicitly or all form POSTs 403. Behind a
@@ -38,6 +40,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      postgres-app-role:
+        condition: service_completed_successfully
       codefort:
         condition: service_started
     restart: unless-stopped
@@ -69,6 +73,7 @@ services:
     cap_add:
       - CHOWN
       - DAC_OVERRIDE
+      - FOWNER
       - SETGID
       - SETUID
     healthcheck:
@@ -78,15 +83,34 @@ services:
       retries: 20
       start_period: 10s
 
+  postgres-app-role:
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-happyjudge}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=${POSTGRES_DB:-happyjudge}
+      - POSTGRES_APP_USER=happyjudge_app
+      - POSTGRES_APP_PASSWORD=${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}
+    volumes:
+      - ./docker/postgres/init-app-role.sh:/usr/local/bin/init-app-role.sh:ro
+    entrypoint: ['/bin/sh', '/usr/local/bin/init-app-role.sh']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
   # Sandboxed code execution, built from the `codefort/` subtree.
   # Fully unprivileged by design: the container runs as nobody with ALL
   # capabilities dropped, and each job gets a private user namespace
-  # (nobody->nobody) plus cap-drop ALL inside the jail. Unconfined
-  # seccomp/apparmor remain only because bubblewrap must create namespaces
-  # and mounts (blocked by Docker's default profiles).
+  # (nobody->nobody) plus cap-drop ALL inside the jail. Bubblewrap requires
+  # namespace and mount syscalls blocked by Docker's default profiles.
   # Containment layers: private compose network, no published ports,
   # CODEFORT_TOKEN auth on POST /v1/run, per-job prlimit ceilings,
-  # API concurrency cap + rate limit, container mem/cpu/pid limits.
+  # API concurrency cap + rate limit, per-job process/storage watchdogs, and
+  # container mem/cpu/pid limits.
   # The happyjudge app intentionally only `service_started`-depends on this:
   # judging degrades to 503s when codefort is down, but the rest stays up.
   codefort:
@@ -105,6 +129,9 @@ services:
       - PORT=3000
       - NODE_ENV=production
     restart: unless-stopped
+    # Reap orphaned sandbox descendants so completed runs do not consume the
+    # container PID budget as zombies.
+    init: true
     cap_drop:
       - ALL
     security_opt:
@@ -130,7 +157,7 @@ services:
   #   docker compose --profile migrate run --rm migrate
   # Uses MIGRATION_DATABASE_URL when set (privileged owner role); falls back to
   # DATABASE_URL construction otherwise. The app runtime role should ideally be
-  # a restricted role without DDL; see README / docs.
+  # owner role; the app uses the restricted happyjudge_app role above.
   migrate:
     profiles: ['migrate']
     build:

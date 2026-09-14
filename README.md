@@ -17,7 +17,7 @@ You will need [Bun](https://bun.sh) installed, a PostgreSQL database, and an ins
 
 1. Clone this repository with `git clone https://github.com/webdev03/happyjudge.git`
 2. Run `bun install`
-3. Copy `.env.example` to `.env` with `cp .env.example .env`, then fill in your codefort instance URL and your PostgreSQL database URL
+3. Copy `.env.example` to `.env` with `cp .env.example .env`, then fill in your codefort instance URL and PostgreSQL passwords. Compose uses the restricted `happyjudge_app` runtime role; migrations use the owner URL.
 4. Run `bun run db:push` to set up the PostgreSQL database (do this explicitly — the app never migrates itself)
 5. Run `bun run build`
 6. Run `bun ./build` to start `happyjudge`!
@@ -35,6 +35,17 @@ docker compose build
 docker compose --profile migrate run --rm migrate   # one-shot controlled migration
 docker compose up -d
 ```
+
+The Compose Codefort service uses `security/codefort-seccomp.json` and the
+`happyjudge-codefort` AppArmor profile. Load the AppArmor profile before
+starting the stack:
+
+```sh
+sudo apparmor_parser -r -W security/codefort-apparmor
+```
+
+If the profile is unavailable, Codefort fails closed instead of starting
+without the requested sandbox policy.
 
 This brings up the full stack: `postgres` + `happyjudge` + `codefort`
 (sandboxed executor, built from the `codefort/` subtree — update it with
@@ -62,7 +73,8 @@ To update happyjudge, just run `git pull` in the directory that you cloned the s
    `create` for each organizer (or `admin` for full access).
 2. Author problems: organizers open `/create/problem`, write the statement,
    then add testcases under `/create/problem/[id]/testcases`.
-   Weights drive IOI partial scoring (best score per problem counts).
+   Testcases in the same subtask are all-or-nothing; their weights sum to the
+   subtask score (best score per problem counts).
 3. Create the contest at `/contests` (title, window, optional
    "release problems publicly when contest ends").
 4. On `/contest/[id]/manage`: add your own problems (they flip to private
@@ -85,3 +97,17 @@ insert into contest_problem (contest_id, problem_id, position, points)
 values ('demo1', '<problem-id-1>', 0, 100), ('demo1', '<problem-id-2>', 1, 100);
 update problem set is_public = false where id in ('<problem-id-1>', '<problem-id-2>');
 ```
+
+## Programmatic access
+
+End users, AI agents, and scripts can use the documented JSON API under `/api` instead
+of driving browser forms. Start with [`docs/PROGRAMMATIC_API.md`](docs/PROGRAMMATIC_API.md)
+or [`llms.txt`](llms.txt), or discover their served URLs with `GET /api`. It documents bearer-token login,
+problem/testcase authoring, contest management and joining, editor/participant
+management, homepage collection access, submissions, scoreboard access, examples, errors, and limits.
+API tokens are shown only when issued; keep them out of logs and source
+control. The additive `api_token` table and the existing `contest_editor` table
+must be migrated before using the API.
+
+The API documents are also served at `/docs/PROGRAMMATIC_API.md` and
+`/llms.txt` for user tooling and AI assistants.

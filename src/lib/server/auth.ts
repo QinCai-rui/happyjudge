@@ -4,6 +4,7 @@ import { sha256 } from '@oslojs/crypto/sha2';
 import { encodeBase64url, encodeHexLowerCase } from '@oslojs/encoding';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
+import { env } from '$env/dynamic/private';
 
 const DAY_IN_MS = 1000 * 60 * 60 * 24;
 
@@ -13,6 +14,29 @@ export function generateSessionToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
   const token = encodeBase64url(bytes);
   return token;
+}
+
+export function generateApiToken() {
+  return `hj_${encodeBase64url(crypto.getRandomValues(new Uint8Array(32)))}`;
+}
+
+export function hashApiToken(token: string) {
+  return encodeHexLowerCase(sha256(new TextEncoder().encode(token)));
+}
+
+export async function createApiToken(userId: string, name: string, expiresAt: Date) {
+  const token = generateApiToken();
+  const record: table.ApiToken = {
+    id: encodeBase64url(crypto.getRandomValues(new Uint8Array(12))),
+    tokenHash: hashApiToken(token),
+    userId,
+    name,
+    createdAt: new Date(),
+    lastUsedAt: null,
+    expiresAt,
+  };
+  await db.insert(table.apiToken).values(record);
+  return { token, record };
 }
 
 export async function createSession(token: string, userId: string) {
@@ -78,7 +102,7 @@ function cookieAttributes(event: RequestEvent): {
   return {
     path: '/',
     sameSite: 'lax',
-    secure: event.url.protocol === 'https:',
+    secure: event.url.protocol === 'https:' || env.ORIGIN?.startsWith('https://') === true,
   };
 }
 

@@ -4,12 +4,18 @@ import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { assertUserExists } from '$lib/server/assertion';
+import { isContestProblemEditor } from '$lib/server/contests';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
   assertUserExists(locals.auth);
   const problem = await db.query.problem.findFirst({ where: eq(table.problem.id, params.id) });
   if (!problem) error(404, 'Not found');
-  if (problem.authorId !== locals.auth.user.id && !locals.auth.user.canAdmin) error(403);
+  if (
+    problem.authorId !== locals.auth.user.id &&
+    !locals.auth.user.canAdmin &&
+    !(await isContestProblemEditor(problem.id, locals.auth.user))
+  )
+    error(403);
   const testcases = await db.query.testcase.findMany({ where: eq(table.testcase.problemId, params.id) });
   testcases.sort((a, b) => a.id - b.id);
   return { problem, testcases };
@@ -20,7 +26,12 @@ export const actions = {
     assertUserExists(locals.auth);
     const problem = await db.query.problem.findFirst({ where: eq(table.problem.id, params.id) });
     if (!problem) error(404, 'Not found');
-    if (problem.authorId !== locals.auth.user.id && !locals.auth.user.canAdmin) error(403);
+    if (
+      problem.authorId !== locals.auth.user.id &&
+      !locals.auth.user.canAdmin &&
+      !(await isContestProblemEditor(problem.id, locals.auth.user))
+    )
+      error(403);
     const data = await request.formData();
     const input = (data.get('input')?.toString() ?? '').replace(/\r\n|\r/g, '\n');
     const output = (data.get('output')?.toString() ?? '').replace(/\r\n|\r/g, '\n');
@@ -31,7 +42,7 @@ export const actions = {
       return fail(400, { message: 'Weight must be 0–10000' });
     if (output.length === 0) return fail(400, { message: 'Output required' });
     await db.insert(table.testcase).values({ problemId: params.id, input, output, caseGroup, weight, isHidden });
-    return { message: 'Added.' };
+    return { success: true, message: 'Added.' };
   },
   update: async ({ request, locals }) => {
     assertUserExists(locals.auth);
@@ -42,7 +53,12 @@ export const actions = {
     if (!tc) error(404, 'Not found');
     const problem = await db.query.problem.findFirst({ where: eq(table.problem.id, tc.problemId) });
     if (!problem) error(404, 'Not found');
-    if (problem.authorId !== locals.auth.user.id && !locals.auth.user.canAdmin) error(403);
+    if (
+      problem.authorId !== locals.auth.user.id &&
+      !locals.auth.user.canAdmin &&
+      !(await isContestProblemEditor(problem.id, locals.auth.user))
+    )
+      error(403);
     const input = (data.get('input')?.toString() ?? '').replace(/\r\n|\r/g, '\n');
     const output = (data.get('output')?.toString() ?? '').replace(/\r\n|\r/g, '\n');
     const caseGroup = (data.get('caseGroup')?.toString() ?? 'Misc').trim().slice(0, 40) || 'Misc';
@@ -50,8 +66,12 @@ export const actions = {
     const isHidden = data.get('isHidden') === 'on';
     if (!Number.isInteger(weight) || weight < 0 || weight > 10000)
       return fail(400, { message: 'Weight must be 0–10000' });
-    await db.update(table.testcase).set({ input, output, caseGroup, weight, isHidden }).where(eq(table.testcase.id, id));
-    return { message: 'Saved.' };
+    if (output.length === 0) return fail(400, { message: 'Output required' });
+    await db
+      .update(table.testcase)
+      .set({ input, output, caseGroup, weight, isHidden })
+      .where(eq(table.testcase.id, id));
+    return { success: true, message: 'Saved.' };
   },
   remove: async ({ request, locals }) => {
     assertUserExists(locals.auth);
@@ -61,8 +81,13 @@ export const actions = {
     if (!tc) error(404, 'Not found');
     const problem = await db.query.problem.findFirst({ where: eq(table.problem.id, tc.problemId) });
     if (!problem) error(404, 'Not found');
-    if (problem.authorId !== locals.auth.user.id && !locals.auth.user.canAdmin) error(403);
+    if (
+      problem.authorId !== locals.auth.user.id &&
+      !locals.auth.user.canAdmin &&
+      !(await isContestProblemEditor(problem.id, locals.auth.user))
+    )
+      error(403);
     await db.delete(table.testcase).where(eq(table.testcase.id, id));
-    return { message: 'Deleted.' };
+    return { success: true, message: 'Deleted.' };
   },
 } satisfies Actions;

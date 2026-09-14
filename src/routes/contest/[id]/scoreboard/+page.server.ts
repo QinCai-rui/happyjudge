@@ -4,7 +4,13 @@ import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { assertUserExists } from '$lib/server/assertion';
-import { canViewContest, computeScoreboard, contestStatus, maybeReleaseContest } from '$lib/server/contests';
+import {
+  canViewContest,
+  computeScoreboard,
+  contestStatus,
+  isContestManager,
+  maybeReleaseContest,
+} from '$lib/server/contests';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
   assertUserExists(locals.auth);
@@ -12,7 +18,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   if (!contest) error(404, 'Not found');
   if (!(await canViewContest(contest, locals.auth.user, params.id))) error(404, 'Not found');
   await maybeReleaseContest(contest);
-  const board = await computeScoreboard(params.id);
+  const board = await computeScoreboard(params.id, await isContestManager(contest, locals.auth.user));
   return {
     contest: { ...contest, status: contestStatus(contest) },
     board: {

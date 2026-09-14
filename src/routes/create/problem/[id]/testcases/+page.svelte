@@ -13,9 +13,12 @@
     <h1 class="text-3xl font-bold tracking-tight">Testcases · {data.problem.title}</h1>
     <a class="btn-ghost" href={`/create/problem/${data.problem.id}`}>← Back to problem</a>
   </div>
-  <p class="text-muted mt-1 text-sm">Weights drive IOI partial scoring. Hidden outputs never leave the server.</p>
+  <p class="text-muted mt-1 text-sm">
+    Testcases with the same group form one all-or-nothing subtask. Its points are the sum of its testcase weights.
+    Hidden outputs never leave the server.
+  </p>
 
-  {#if form?.message}<p class="mt-4 form-success">{form.message}</p>{/if}
+  {#if form?.message}<p class="mt-4 {form.success ? 'form-success' : 'form-error'}">{form.message}</p>{/if}
 
   <div class="mt-6 space-y-4">
     {#each data.testcases as tc (tc.id)}
@@ -30,17 +33,30 @@
           <textarea class="form-input font-mono" id={'output-' + tc.id} name="output" rows="4">{tc.output}</textarea>
         </div>
         <div class="flex flex-wrap items-end gap-3 md:col-span-2">
-          <label class="text-sm">Group <input class="form-input w-32" name="caseGroup" value={tc.caseGroup} /></label>
-          <label class="text-sm">Weight <input class="form-input w-24" name="weight" type="number" value={tc.weight} min="0" max="10000" /></label>
-          <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="isHidden" checked={tc.isHidden} class="checkbox" /> Hidden</label>
+          <label class="text-sm">Subtask <input class="form-input w-32" name="caseGroup" value={tc.caseGroup} /></label>
+          <label class="text-sm"
+            >Weight <input
+              class="form-input w-24"
+              name="weight"
+              type="number"
+              value={tc.weight}
+              min="0"
+              max="10000"
+            /></label
+          >
+          <label class="flex items-center gap-2 text-sm"
+            ><input type="checkbox" name="isHidden" checked={tc.isHidden} class="checkbox" /> Hidden</label
+          >
           <span class="ml-auto flex gap-2">
             <button class="btn-primary">Save</button>
-            <button class="btn-danger" formaction="?/remove">Delete</button>
+            <button class="btn-danger" formaction="?/remove" formnovalidate>Delete</button>
           </span>
         </div>
       </form>
     {:else}
-      <p class="text-muted text-sm italic">No testcases yet — add the first one below. Submissions with zero testcases will fail judging.</p>
+      <p class="text-muted text-sm italic">
+        No testcases yet — add the first one below. Submissions with zero testcases will fail judging.
+      </p>
     {/each}
   </div>
 
@@ -52,12 +68,17 @@
     </div>
     <div>
       <label class="form-label" for="output">Expected output</label>
-      <textarea class="form-input font-mono" id="output" name="output" rows="4" required placeholder="expected stdout…"></textarea>
+      <textarea class="form-input font-mono" id="output" name="output" rows="4" required placeholder="expected stdout…"
+      ></textarea>
     </div>
     <div class="flex flex-wrap items-end gap-3 md:col-span-2">
-      <label class="text-sm">Group <input class="form-input w-32" name="caseGroup" value="Misc" /></label>
-      <label class="text-sm">Weight <input class="form-input w-24" name="weight" type="number" value="1" min="0" max="10000" /></label>
-      <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="isHidden" checked class="checkbox" /> Hidden</label>
+      <label class="text-sm">Subtask <input class="form-input w-32" name="caseGroup" value="Misc" /></label>
+      <label class="text-sm"
+        >Weight <input class="form-input w-24" name="weight" type="number" value="1" min="0" max="10000" /></label
+      >
+      <label class="flex items-center gap-2 text-sm"
+        ><input type="checkbox" name="isHidden" checked class="checkbox" /> Hidden</label
+      >
       <button class="btn-primary ml-auto">Add testcase</button>
     </div>
   </form>

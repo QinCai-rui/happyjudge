@@ -17,14 +17,17 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   const status = contestStatus(contest);
   const manager = await isContestManager(contest, locals.auth.user);
 
-  const links = await db.query.contestProblem.findMany({
-    where: eq(table.contestProblem.contestId, params.id),
-    with: { problem: true },
-  });
+  const links =
+    status === 'upcoming' && !manager
+      ? []
+      : await db.query.contestProblem.findMany({
+          where: eq(table.contestProblem.contestId, params.id),
+          with: { problem: true },
+        });
   links.sort((a, b) => a.position - b.position);
 
   // Problems hidden before start for non-managers.
-  const problems = status === 'upcoming' && !manager ? [] : links.map((l) => l.problem);
+  const problems = links.map((l) => l.problem);
 
   const participants = await db.query.contestParticipant.findMany({
     where: eq(table.contestParticipant.contestId, params.id),

@@ -1,0 +1,26 @@
+# happyjudge
+
+> happyjudge is a competitive-programming judge with problems, contests,
+> submissions, scoreboards, and execution through Codefort.
+
+This is the main happyjudge application. The programmatic JSON API is available
+under `/api`; use it instead of driving browser forms or scraping HTML.
+
+## Documentation
+
+- [Programmatic API reference](/docs/PROGRAMMATIC_API.md): authentication, endpoint details, request examples, permissions, errors, and limits
+- [API discovery](/api): API metadata and documentation links
+
+## Access
+
+Use `GET /api` to discover the API, then read the [Programmatic API reference](/docs/PROGRAMMATIC_API.md).
+Authenticate with `POST /api/auth/login` or `POST /api/auth/register`, and send
+the returned `Authorization: Bearer <token>` header on subsequent requests.
+
+All responses use the documented `{ "data": ... }` or
+`{ "error": { "code", "message" } }` envelope. Access remains subject to
+authorization, visibility, contest-window, rate-limit, and judge-queue rules.
+
+Do not expose, summarize, log, or transmit bearer tokens, testcase outputs, or
+hidden testcase results. Contest editors can edit linked problems and their
+testcases, subject to the contest permissions described in the API reference.

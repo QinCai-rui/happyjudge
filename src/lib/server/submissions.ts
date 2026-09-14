@@ -1,8 +1,8 @@
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq, lt } from 'drizzle-orm';
 import PQueue from 'p-queue';
-import { execute } from './codefort';
+import { execute, type CodefortResult } from './codefort';
 
 // Resource-exhaustion guards. Tune to your hardware / Codefort capacity.
 export const MAX_CODE_BYTES = 128 * 1024; // 128 KiB per submission
@@ -23,36 +23,82 @@ export function isSubmissionQueueFull(): boolean {
   return getSubmissionQueueDepth() >= MAX_PENDING_JOBS;
 }
 
-async function executeTestcases(submission: table.Submission, problem: table.Problem) {
+export async function runCustomInput(
+  language: string,
+  code: string,
+  stdin: string,
+  problem: table.Problem,
+): Promise<CodefortResult> {
+  if (Buffer.byteLength(code, 'utf8') > MAX_CODE_BYTES) {
+    throw Object.assign(new Error(`Code too large (>${MAX_CODE_BYTES} bytes)`), { status: 413 });
+  }
+  if (Buffer.byteLength(stdin, 'utf8') > MAX_STDIN_BYTES) {
+    throw Object.assign(new Error(`Input too large (>${MAX_STDIN_BYTES} bytes)`), { status: 413 });
+  }
+  if (isSubmissionQueueFull()) {
+    throw Object.assign(new Error('Execution queue is full, try again later'), { status: 429 });
+  }
+
+  const result = await queue.add(() =>
+    execute(language, code, stdin, 4000, problem.memoryLimit, problem.timeLimit, problem.memoryLimit),
+  );
+  if (!result) throw new Error('Execution queue stopped before the run completed');
+  return result;
+}
+
+async function executeTestcases(submission: table.Submission, problem: table.Problem, testcases: table.Testcase[]) {
   try {
-    const testcases = await db.query.testcase.findMany({
-      where: eq(table.testcase.problemId, problem.id),
-      limit: MAX_TESTCASES_PER_SUBMISSION + 1,
-    });
-    if (testcases.length > MAX_TESTCASES_PER_SUBMISSION) {
-      throw new Error(`Too many testcases (>${MAX_TESTCASES_PER_SUBMISSION})`);
-    }
-    const results: table.Result[] = [];
     queue.start();
-    await queue.addAll(
-      testcases.map((testcase) => async () => {
+    const results = await Promise.all(
+      testcases.map(async (testcase) => {
         const stdin =
           testcase.input.length > MAX_STDIN_BYTES ? testcase.input.slice(0, MAX_STDIN_BYTES) : testcase.input;
-        let result;
         try {
-          result = await execute(
-            submission.language,
-            submission.code,
-            stdin,
-            4000, // reasonable compile time limit?
-            problem.memoryLimit,
-            problem.timeLimit,
-            problem.memoryLimit,
+          const result = await queue.add(() =>
+            execute(
+              submission.language,
+              submission.code,
+              stdin,
+              4000, // reasonable compile time limit?
+              problem.memoryLimit,
+              problem.timeLimit,
+              problem.memoryLimit,
+            ),
           );
+          if (!result) throw new Error('Execution queue stopped before the run completed');
+
+          const outputMatches =
+            result.stdout
+              .split('\n')
+              .map((x) => x.trim())
+              .join('')
+              .trim() ===
+            testcase.output
+              .split('\n')
+              .map((x) => x.trim())
+              .join('')
+              .trim();
+
+          return {
+            id: testcase.id,
+            caseGroup: testcase.caseGroup,
+            memoryUsed: 0, // TODO
+            output: result.stdout.slice(0, MAX_STDIN_BYTES),
+            timeTaken: result.stats.run.realTime,
+            // TODO: fix this
+            verdict: outputMatches
+              ? 'accepted'
+              : result.exitCode !== 0
+                ? 'runtime_error'
+                : result.stats.run.realTime >= problem.timeLimit
+                  ? 'time_limit_exceeded'
+                  : 'wrong_answer',
+            score: outputMatches ? testcase.weight : 0,
+          } satisfies table.Result;
         } catch (e) {
           // Do not fail the whole submission on one Codefort error; record it.
           console.error('Codefort execution error:', e);
-          results.push({
+          return {
             id: testcase.id,
             caseGroup: testcase.caseGroup,
             memoryUsed: 0,
@@ -60,43 +106,16 @@ async function executeTestcases(submission: table.Submission, problem: table.Pro
             timeTaken: 0,
             verdict: 'runtime_error',
             score: 0,
-          });
-          return;
+          } satisfies table.Result;
         }
-
-        const outputMatches =
-          result.stdout
-            .split('\n')
-            .map((x) => x.trim())
-            .join('')
-            .trim() ===
-          testcase.output
-            .split('\n')
-            .map((x) => x.trim())
-            .join('')
-            .trim();
-
-        results.push({
-          id: testcase.id,
-          caseGroup: testcase.caseGroup,
-          memoryUsed: 0, // TODO
-          output: result.stdout.slice(0, MAX_STDIN_BYTES),
-          timeTaken: result.stats.run.realTime,
-          // TODO: fix this
-          verdict: outputMatches
-            ? 'accepted'
-            : result.exitCode !== 0
-              ? 'runtime_error'
-              : result.stats.run.realTime >= problem.timeLimit
-                ? 'time_limit_exceeded'
-                : 'wrong_answer',
-          // TODO: also fix this
-          score: outputMatches ? testcase.weight : 0,
-        });
-
-        // TODO: socket.io broadcast
       }),
     );
+    if (submission.scoringVersion === table.caseGroupAllOrNothingV1) {
+      const groupPassed = new Map<string, boolean>();
+      for (const result of results)
+        groupPassed.set(result.caseGroup, (groupPassed.get(result.caseGroup) ?? true) && result.verdict === 'accepted');
+      for (const result of results) if (!groupPassed.get(result.caseGroup)) result.score = 0;
+    }
     await db.update(table.submission).set({ results }).where(eq(table.submission.id, submission.id));
   } catch (e) {
     console.error('Submission processing failed:', e);
@@ -119,6 +138,27 @@ async function executeTestcases(submission: table.Submission, problem: table.Pro
   }
 }
 
+/** Resume work that was interrupted by an application restart. */
+export async function resumeInterruptedSubmissions() {
+  try {
+    const cutoff = new Date(Date.now() - 5 * 60_000);
+    const interrupted = await db.query.submission.findMany({
+      where: and(eq(table.submission.results, []), lt(table.submission.submittedAt, cutoff)),
+    });
+    for (const submission of interrupted) {
+      const problem = await db.query.problem.findFirst({ where: eq(table.problem.id, submission.problemId) });
+      if (!problem) continue;
+      const testcases = await db.query.testcase.findMany({
+        where: eq(table.testcase.problemId, problem.id),
+        limit: MAX_TESTCASES_PER_SUBMISSION + 1,
+      });
+      if (testcases.length <= MAX_TESTCASES_PER_SUBMISSION) void executeTestcases(submission, problem, testcases);
+    }
+  } catch (e) {
+    console.error('Interrupted submission recovery failed:', e);
+  }
+}
+
 export default async function createSubmission(
   language: string,
   code: string,
@@ -138,6 +178,15 @@ export default async function createSubmission(
   });
   if (!problem) throw Object.assign(new Error('Problem not found'), { status: 404 });
 
+  const testcases = await db.query.testcase.findMany({
+    where: eq(table.testcase.problemId, problem.id),
+    limit: MAX_TESTCASES_PER_SUBMISSION + 1,
+  });
+  if (testcases.length > MAX_TESTCASES_PER_SUBMISSION) {
+    throw Object.assign(new Error(`Too many testcases (>${MAX_TESTCASES_PER_SUBMISSION})`), { status: 400 });
+  }
+  const scoreNormalizationTotal = testcases.reduce((total, testcase) => total + testcase.weight, 0) || 1;
+
   const submission = (
     await db
       .insert(table.submission)
@@ -147,12 +196,14 @@ export default async function createSubmission(
         code,
         userId,
         contestId: contestId ?? null,
+        scoreNormalizationTotal,
+        scoringVersion: table.caseGroupAllOrNothingV1,
       })
       .returning()
   )[0];
 
   // Fire-and-forget judged work; errors are captured in executeTestcases.
-  void executeTestcases(submission, problem);
+  void executeTestcases(submission, problem, testcases);
 
   return submission;
 }

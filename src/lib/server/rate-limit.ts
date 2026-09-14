@@ -5,6 +5,13 @@
 
 const buckets = new Map<string, number[]>();
 
+// User-facing execution limits. These allow normal contest iteration while
+// leaving the bounded submission queue and Codefort concurrency guard in place.
+export const SUBMISSION_RATE_LIMIT = 60;
+export const SUBMISSION_RATE_WINDOW_MS = 10 * 60_000;
+export const CUSTOM_RUN_RATE_LIMIT = 120;
+export const CUSTOM_RUN_RATE_WINDOW_MS = 60_000;
+
 /** Sliding-window check. Returns true if allowed (and records the hit). */
 export function checkRateLimit(key: string, limit: number, windowMs: number, now = Date.now()): boolean {
   const cutoff = now - windowMs;

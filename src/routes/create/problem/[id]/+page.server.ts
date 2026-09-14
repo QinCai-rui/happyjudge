@@ -4,13 +4,19 @@ import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 import { assertUserExists } from '$lib/server/assertion';
+import { isContestProblemEditor } from '$lib/server/contests';
+import { parseSamples } from '$lib/server/validation';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
   assertUserExists(locals.auth);
   const problem = await db.query.problem.findFirst({ where: eq(table.problem.id, params.id) });
   if (!problem) error(404, 'Not found');
-  if (problem.authorId !== locals.auth.user.id && !locals.auth.user.canAdmin) error(403);
-  return { problem, user: locals.auth.user };
+  const isEditor =
+    problem.authorId !== locals.auth.user.id &&
+    !locals.auth.user.canAdmin &&
+    (await isContestProblemEditor(problem.id, locals.auth.user));
+  if (problem.authorId !== locals.auth.user.id && !locals.auth.user.canAdmin && !isEditor) error(403);
+  return { problem, user: locals.auth.user, canEditVisibility: !isEditor };
 };
 
 export const actions = {
@@ -18,7 +24,11 @@ export const actions = {
     assertUserExists(locals.auth);
     const problem = await db.query.problem.findFirst({ where: eq(table.problem.id, params.id) });
     if (!problem) error(404, 'Not found');
-    if (problem.authorId !== locals.auth.user.id && !locals.auth.user.canAdmin) error(403);
+    const isEditor =
+      problem.authorId !== locals.auth.user.id &&
+      !locals.auth.user.canAdmin &&
+      (await isContestProblemEditor(problem.id, locals.auth.user));
+    if (problem.authorId !== locals.auth.user.id && !locals.auth.user.canAdmin && !isEditor) error(403);
 
     const data = await request.formData();
     const title = (data.get('title')?.toString() ?? '').trim();
@@ -42,8 +52,7 @@ export const actions = {
       return fail(400, { message: 'Memory limit 16–2048 MB' });
     let samples: { input: string; output: string }[];
     try {
-      samples = JSON.parse(samplesRaw);
-      if (!Array.isArray(samples)) throw new Error();
+      samples = samplesRaw.trim() ? parseSamples(samplesRaw) : [];
     } catch {
       return fail(400, { message: 'Samples must be valid JSON array' });
     }
@@ -64,7 +73,7 @@ export const actions = {
         sampleTestcases: samples,
         tags,
         homepage: locals.auth.user.canAdmin ? homepage : problem.homepage,
-        isPublic,
+        isPublic: isEditor ? problem.isPublic : isPublic,
         displayGroup,
       })
       .where(eq(table.problem.id, params.id));

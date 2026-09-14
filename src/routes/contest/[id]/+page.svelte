@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { invalidateAll } from '$app/navigation';
   import type { PageServerData } from './$types';
 
   let { data }: { data: PageServerData } = $props();
@@ -7,7 +8,20 @@
   let now = $state(Date.now());
 
   onMount(() => {
-    const t = setInterval(() => (now = Date.now()), 1000);
+    let refreshedAtBoundary = false;
+    let lastTarget = 0;
+    const t = setInterval(() => {
+      const current = Date.now();
+      if (target !== lastTarget) {
+        lastTarget = target;
+        refreshedAtBoundary = false;
+      }
+      now = current;
+      if (current >= target && !refreshedAtBoundary) {
+        refreshedAtBoundary = true;
+        void invalidateAll();
+      }
+    }, 1000);
     return () => clearInterval(t);
   });
 
@@ -25,9 +39,11 @@
 <div class="mx-auto max-w-4xl">
   <div class="contest-banner" data-status={c.status}>
     {#if c.status === 'upcoming'}
-      ⏳ Starts <time datetime={String(c.startsAt)}>{new Date(c.startsAt).toLocaleString()}</time> · <span aria-live="polite">{countdown}</span>
+      ⏳ Starts <time datetime={String(c.startsAt)}>{new Date(c.startsAt).toLocaleString()}</time> ·
+      <span aria-live="polite">{countdown}</span>
     {:else if c.status === 'live'}
-      🟢 Live — ends <time datetime={String(c.endsAt)}>{new Date(c.endsAt).toLocaleString()}</time> · <span aria-live="polite">{countdown} left</span>
+      🟢 Live — ends <time datetime={String(c.endsAt)}>{new Date(c.endsAt).toLocaleString()}</time> ·
+      <span aria-live="polite">{countdown} left</span>
     {:else}
       🏁 Ended <time datetime={String(c.endsAt)}>{new Date(c.endsAt).toLocaleString()}</time>
     {/if}
@@ -36,7 +52,9 @@
 
   <h1 class="mt-4 text-3xl font-bold tracking-tight">{c.title}</h1>
   {#if c.description}<p class="text-muted mt-2 max-w-prose whitespace-pre-wrap">{c.description}</p>{/if}
-  <p class="text-muted mt-2 text-sm">{data.participantCount} participant(s) · IOI partial scoring · live scoreboard</p>
+  <p class="text-muted mt-2 text-sm">
+    {data.participantCount} participant(s) · all-or-nothing subtasks · live scoreboard
+  </p>
 
   <div class="mt-4 flex flex-wrap gap-2">
     <a class="btn-primary" href={`/contest/${c.id}/scoreboard`}>Scoreboard</a>

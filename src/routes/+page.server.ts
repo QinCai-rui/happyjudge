@@ -3,7 +3,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 export const load: PageServerLoad = async ({ locals }) => {
   if (!locals.auth.user) {
@@ -15,7 +15,30 @@ export const load: PageServerLoad = async ({ locals }) => {
     limit: 80, // only 80 at once
   });
 
-  return { user: locals.auth.user, problems };
+  const attempts = problems.length
+    ? await db.query.submission.findMany({
+        where: and(
+          eq(table.submission.userId, locals.auth.user.id),
+          inArray(
+            table.submission.problemId,
+            problems.map((problem) => problem.id),
+          ),
+        ),
+        columns: { problemId: true, results: true },
+      })
+    : [];
+
+  const progress = Object.fromEntries(
+    problems.map((problem) => {
+      const submissions = attempts.filter((attempt) => attempt.problemId === problem.id);
+      const solved = submissions.some(
+        (attempt) => attempt.results.length > 0 && attempt.results.every((result) => result.verdict === 'accepted'),
+      );
+      return [problem.id, solved ? 'solved' : submissions.length ? 'attempted' : 'unattempted'];
+    }),
+  );
+
+  return { user: locals.auth.user, problems, progress };
 };
 
 export const actions: Actions = {

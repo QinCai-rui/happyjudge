@@ -1,0 +1,28 @@
+#include <tunables/global>
+
+profile happyjudge-codefort flags=(attach_disconnected,mediate_deleted) {
+  /app/** rix,
+  /tmp/** rwix,
+  /usr/** rix,
+  /bin/** rix,
+  /lib/** rix,
+  /lib64/** rix,
+  /etc/** r,
+  /proc/** r,
+  /sys/** r,
+  /dev/** rw,
+
+  capability sys_admin,
+  capability sys_chroot,
+  capability setuid,
+  capability setgid,
+  capability dac_override,
+  capability dac_read_search,
+  mount,
+  umount,
+  pivot_root,
+  signal,
+  unix,
+  network inet stream,
+  network inet6 stream,
+}

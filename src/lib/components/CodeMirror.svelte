@@ -8,6 +8,13 @@
   let { value = $bindable(''), basicEditSetup = true, readOnly = false } = $props();
 
   let divEl: HTMLDivElement; // the warning here is actually okay! https://github.com/sveltejs/svelte/issues/13102
+  let view: EditorView | undefined;
+
+  $effect(() => {
+    if (view && value !== view.state.doc.toString()) {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } });
+    }
+  });
 
   onMount(() => {
     let startState = EditorState.create({
@@ -15,14 +22,16 @@
       extensions: [basicEditSetup ? basicSetup : [lineNumbers()], EditorState.readOnly.of(readOnly)],
     });
 
-    let view = new EditorView({
+    view = new EditorView({
       state: startState,
       parent: divEl,
       dispatchTransactions: (transactions) => {
-        view.update(transactions);
-        value = view.state.doc.toString(); // to update
+        view?.update(transactions);
+        value = view?.state.doc.toString() ?? '';
       },
     });
+
+    return () => view?.destroy();
   });
 </script>
 

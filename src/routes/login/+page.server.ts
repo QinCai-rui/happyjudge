@@ -11,14 +11,13 @@ import type { Actions, PageServerLoad } from './$types';
 const AUTH_LIMIT = 20;
 const AUTH_WINDOW_MS = 60_000;
 
-function clientKey(event: Parameters<Actions['login']>[0], scope: string) {
-  let ip = 'unknown';
+function clientKey(event: Parameters<Actions['login']>[0], scope: string): string | null {
   try {
-    ip = event.getClientAddress();
+    return `auth:${scope}:${event.getClientAddress()}`;
   } catch {
-    // getClientAddress can throw behind some proxies; fall back to shared bucket.
+    // Do not place requests with an unknown source into a shared bucket.
+    return null;
   }
-  return `auth:${scope}:${ip}`;
 }
 
 /** User lookup that turns infrastructure failure (e.g. unmigrated DB)
@@ -42,17 +41,20 @@ export const load: PageServerLoad = async (event) => {
   if (event.locals.auth.user) {
     return redirect(302, '/');
   }
-  return {};
+  return { redirectTo: safeRedirect(event.url.searchParams.get('redirect')) };
 };
 
 export const actions: Actions = {
   login: async (event) => {
-    if (!checkRateLimit(clientKey(event, 'login'), AUTH_LIMIT, AUTH_WINDOW_MS)) {
+    const key = clientKey(event, 'login');
+    if (!key) return fail(503, { message: 'Unable to determine client address' });
+    if (!checkRateLimit(key, AUTH_LIMIT, AUTH_WINDOW_MS)) {
       return fail(429, { message: 'Too many attempts, try again later' });
     }
     const formData = await event.request.formData();
     const username = formData.get('username');
     const password = formData.get('password');
+    const redirectTo = safeRedirect(formData.get('redirect')?.toString());
 
     if (!validateUsername(username)) {
       return fail(400, {
@@ -80,15 +82,18 @@ export const actions: Actions = {
     const session = await auth.createSession(sessionToken, existingUser.id);
     auth.setSessionTokenCookie(event, sessionToken, session.expiresAt);
 
-    return redirect(302, '/');
+    return redirect(302, redirectTo);
   },
   register: async (event) => {
-    if (!checkRateLimit(clientKey(event, 'register'), AUTH_LIMIT, AUTH_WINDOW_MS)) {
+    const key = clientKey(event, 'register');
+    if (!key) return fail(503, { message: 'Unable to determine client address' });
+    if (!checkRateLimit(key, AUTH_LIMIT, AUTH_WINDOW_MS)) {
       return fail(429, { message: 'Too many attempts, try again later' });
     }
     const formData = await event.request.formData();
     const username = formData.get('username');
     const password = formData.get('password');
+    const redirectTo = safeRedirect(formData.get('redirect')?.toString());
 
     if (!validateUsername(username)) {
       return fail(400, { message: 'Invalid username' });
@@ -124,7 +129,7 @@ export const actions: Actions = {
       );
       return fail(500, { message: 'An error has occurred' });
     }
-    return redirect(302, '/');
+    return redirect(302, redirectTo);
   },
 };
 
@@ -143,4 +148,8 @@ function validateUsername(username: unknown): username is string {
 
 function validatePassword(password: unknown): password is string {
   return typeof password === 'string' && password.length >= 6 && password.length <= 255;
+}
+
+function safeRedirect(value: string | null | undefined): string {
+  return value && value.startsWith('/') && !value.startsWith('//') ? value : '/';
 }
