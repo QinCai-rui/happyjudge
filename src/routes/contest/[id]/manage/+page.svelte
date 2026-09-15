@@ -1,28 +1,29 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import type { ActionData, PageServerData } from './$types';
+  import { normalizeScheduleForm, toLocalDateTimeInput } from '$lib/datetime';
 
   let { data, form }: { data: PageServerData; form: ActionData } = $props();
   const c = $derived(data.contest);
   let copied = $state(false);
-  const toLocal = (d: string | Date) => {
-    const dt = new Date(d);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
-  };
-  let startsAtInput: HTMLInputElement;
-  let endsAtInput: HTMLInputElement;
-
-  onMount(() => {
-    startsAtInput.value = toLocal(c.startsAt);
-    endsAtInput.value = toLocal(c.endsAt);
+  let startsAt = $state('');
+  let endsAt = $state('');
+  $effect(() => {
+    startsAt = toLocalDateTimeInput(c.startsAt);
+    endsAt = toLocalDateTimeInput(c.endsAt);
   });
-
-  function syncUtcDate(event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const utcInput = document.getElementById(`${input.id}Utc`) as HTMLInputElement;
-    utcInput.value = new Date(input.value).toISOString();
-  }
+  const scheduledDuration = $derived(
+    new Date(endsAt).getTime() - new Date(startsAt).getTime(),
+  );
+  const isScheduleValid = $derived(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(startsAt) &&
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(endsAt) &&
+      scheduledDuration > 0,
+  );
+  const durationLabel = $derived(
+    isScheduleValid
+      ? `${Math.floor(scheduledDuration / 3_600_000)}h ${Math.floor((scheduledDuration % 3_600_000) / 60_000)}m`
+      : 'End time must be after the start time',
+  );
 </script>
 
 <svelte:head>
@@ -31,11 +32,26 @@
 
 <div class="mx-auto max-w-4xl">
   <a class="btn-ghost text-sm" href={`/contest/${c.id}`}>← Back to contest</a>
-  <h1 class="mt-2 text-3xl font-bold tracking-tight">Manage · {c.title}</h1>
+  <div class="section-heading mt-6">
+    <p class="eyebrow mb-3">Organizer workspace</p>
+    <h1 class="page-title">{c.title}</h1>
+    <nav
+      aria-label="Contest management sections"
+      class="mt-5 flex flex-wrap gap-4 text-sm text-blue-700 dark:text-blue-300"
+    >
+      <a href="#details" class="hover:underline">Details</a><a href="#invitation" class="hover:underline">Invite link</a
+      ><a href="#problems" class="hover:underline">Problems</a><a href="#participants" class="hover:underline"
+        >Participants</a
+      >
+      {#if data.canManageEditors}<a href="#editors" class="hover:underline">Editors</a>{/if}
+    </nav>
+  </div>
 
-  {#if form?.message}<p class="form-success mt-4">{form.message}</p>{/if}
+  {#if form?.message}<p class={form.message === 'Saved.' ? 'form-success mt-4' : 'form-error mt-4'}>
+      {form.message}
+    </p>{/if}
 
-  <form method="POST" action="?/update" class="card mt-6 space-y-4">
+  <form id="details" method="POST" action="?/update" class="card mt-6 scroll-mt-40 space-y-4" onsubmit={normalizeScheduleForm}>
     <h2 class="text-xl font-semibold">Timing & details</h2>
     <div>
       <label class="form-label" for="title">Title</label>
@@ -45,34 +61,36 @@
       <label class="form-label" for="description">Description</label>
       <textarea class="form-input" id="description" name="description" rows="3">{c.description}</textarea>
     </div>
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <div>
-        <label class="form-label" for="startsAtLocal">Starts at</label>
-        <input id="startsAtUtc" name="startsAt" type="hidden" value={new Date(c.startsAt).toISOString()} />
-        <input
-          class="form-input"
-          id="startsAtLocal"
-          type="datetime-local"
-          value={toLocal(c.startsAt)}
-          bind:this={startsAtInput}
-          oninput={syncUtcDate}
-          required
-        />
+    <fieldset class="border-y border-slate-200 py-5 dark:border-slate-800">
+        <legend class="font-semibold">Schedule</legend>
+        <p class="text-muted mt-1 text-sm">
+         Set both times in your local timezone. Participants see them in their own local timezone.
+        </p>
+      <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label class="form-label" for="startsAt">Starts at <span class="text-muted font-normal">(your local time)</span></label>
+          <input
+            class="form-input"
+            id="startsAt"
+            name="startsAt"
+            type="datetime-local"
+            bind:value={startsAt}
+            required
+          />
+        </div>
+        <div>
+          <label class="form-label" for="endsAt">Ends at <span class="text-muted font-normal">(your local time)</span></label>
+          <input class="form-input" id="endsAt" name="endsAt" type="datetime-local" bind:value={endsAt} required />
+        </div>
       </div>
-      <div>
-        <label class="form-label" for="endsAtLocal">Ends at</label>
-        <input id="endsAtUtc" name="endsAt" type="hidden" value={new Date(c.endsAt).toISOString()} />
-        <input
-          class="form-input"
-          id="endsAtLocal"
-          type="datetime-local"
-          value={toLocal(c.endsAt)}
-          bind:this={endsAtInput}
-          oninput={syncUtcDate}
-          required
-        />
-      </div>
-    </div>
+      <p
+        class:form-error={!isScheduleValid}
+        class="text-muted mt-3 text-xs"
+        role={!isScheduleValid ? 'alert' : undefined}
+      >
+        {isScheduleValid ? `Contest duration: ${durationLabel}` : durationLabel}
+      </p>
+    </fieldset>
     <label class="flex items-center gap-2 text-sm"
       ><input type="checkbox" name="isPublic" checked={c.isPublic} class="checkbox" /> Public contest: anyone logged in can
       view and join</label
@@ -81,10 +99,10 @@
       ><input type="checkbox" name="releaseOnEnd" checked={c.releaseOnEnd} class="checkbox" /> Release problems publicly
       when contest ends</label
     >
-    <button class="btn-primary">Save</button>
+    <button class="btn-primary" disabled={!isScheduleValid}>Save changes</button>
   </form>
 
-  <div class="card mt-6">
+  <div id="invitation" class="card mt-6 scroll-mt-40">
     <h2 class="text-xl font-semibold">Invite link</h2>
     <p class="text-muted mt-1 text-sm">Anyone with this link can join this private contest.</p>
     <div class="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -104,11 +122,13 @@
     </form>
   </div>
 
-  <div class="card mt-6">
+  <div id="problems" class="card mt-6 scroll-mt-40">
     <h2 class="text-xl font-semibold">Problems ({data.links.length})</h2>
     <ul class="mt-3 space-y-2">
       {#each data.links as l}
-        <li class="flex items-center justify-between gap-2 text-sm">
+        <li
+          class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 py-3 text-sm dark:border-slate-800"
+        >
           <span>{l.position + 1}. {l.problem?.title ?? l.problemId} · {l.points} pts</span>
           <span class="flex shrink-0 items-center gap-2">
             {#if data.canAddAnyProblem || l.problem?.authorId === data.userId}
@@ -157,8 +177,8 @@
     <p class="text-muted mt-2 text-xs">Adding a problem marks it private until release.</p>
   </div>
 
-  <div class="card mt-6">
-    <h2 class="text-xl font-semibold">Invites ({data.participants.length})</h2>
+  <div id="participants" class="card mt-6 scroll-mt-40">
+    <h2 class="text-xl font-semibold">Participants ({data.participants.length})</h2>
     <ul class="mt-3 space-y-2">
       {#each data.participants as p}
         <li class="flex items-center justify-between gap-2 text-sm">
@@ -177,7 +197,7 @@
   </div>
 
   {#if data.canManageEditors}
-    <div class="card mt-6">
+    <div id="editors" class="card mt-6 scroll-mt-40">
       <h2 class="text-xl font-semibold">Editors ({data.editors.length})</h2>
       <p class="text-muted mt-1 text-sm">
         Editors can change contest details, problems, testcases, and participants. Only the author or an admin can grant

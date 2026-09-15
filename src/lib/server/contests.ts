@@ -5,6 +5,13 @@ import * as table from '$lib/server/db/schema';
 
 export type ContestStatus = 'upcoming' | 'live' | 'ended';
 
+/** Parse the timezone-free value emitted by <input type="datetime-local"> as UTC. */
+export function parseUtcDateTime(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}:00.000Z`);
+  return isNaN(+date) || date.toISOString().slice(0, 16) !== value ? null : date;
+}
+
 export type ScoreboardCell = {
   problemId: string;
   score: number;
@@ -248,15 +255,4 @@ export function generateContestId(): string {
 
 export function generateInviteToken(): string {
   return encodeBase64url(crypto.getRandomValues(new Uint8Array(24)));
-}
-
-export function slugifyProblemId(title: string): string {
-  const base =
-    title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || 'problem';
-  const suffix = Math.random().toString(36).slice(2, 8);
-  return `${base}-${suffix}`;
 }

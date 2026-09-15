@@ -10,15 +10,15 @@
 </svelte:head>
 
 <div
-  class="mx-auto grid max-w-5xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5 lg:grid-cols-2 dark:border-slate-800 dark:bg-slate-900"
+  class="mx-auto my-6 grid max-w-5xl overflow-hidden rounded-lg border border-slate-200 bg-white lg:grid-cols-2 dark:border-slate-800 dark:bg-slate-900"
 >
   <section class="hidden bg-slate-950 p-10 text-white lg:flex lg:flex-col lg:justify-between">
     <div>
-      <span class="grid size-10 place-items-center rounded-xl bg-blue-600 font-mono text-sm font-bold">HJ</span>
+      <span class="grid size-10 place-items-center rounded-sm border border-slate-500 font-serif text-2xl">h.</span>
     </div>
     <div>
       <p class="text-xs font-bold tracking-widest text-blue-400 uppercase">Build skill through practice</p>
-      <h1 class="mt-3 text-4xl font-bold tracking-tight">Solve better.<br />Compete smarter.</h1>
+      <h2 class="mt-3 font-serif text-5xl leading-tight">Every solution<br />starts with an idea.</h2>
       <p class="mt-4 max-w-sm leading-7 text-slate-300">
         A focused online judge for practice, private contests, and transparent partial scoring.
       </p>
@@ -53,7 +53,7 @@
           placeholder="Enter your password"
         />
       </div>
-      <button class="btn-primary w-full">Login</button>
+      <button class="btn-primary w-full">Sign in</button>
       <div class="flex items-center gap-3">
         <span class="h-px flex-1 bg-slate-200 dark:bg-slate-700"></span><span
           class="text-muted text-xs font-medium uppercase">New here?</span

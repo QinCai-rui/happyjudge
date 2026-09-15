@@ -1,135 +1,207 @@
 <script lang="ts">
+  import Difficulty from '$lib/components/Difficulty.svelte';
   import type { PageServerData } from './$types';
-
   let { data }: { data: PageServerData } = $props();
-
   let query = $state('');
   let difficulty = $state('all');
+  let progress = $state('all');
+  let view = $state<'recommended' | 'all' | 'solved'>('recommended');
   const difficulties = ['all', 'easy', 'medium', 'hard', 'expert', 'insane'];
+  const solved = $derived(data.problems.filter((p) => data.progress[p.id] === 'solved').length);
+  const attempted = $derived(data.problems.filter((p) => data.progress[p.id] === 'attempted').length);
+  const continueProblems = $derived(
+    data.recentProblemIds
+      .map((id) => data.problems.find((problem) => problem.id === id))
+      .filter((problem): problem is NonNullable<typeof problem> =>
+        Boolean(problem && data.progress[problem.id] !== 'solved'),
+      )
+      .slice(0, 3),
+  );
   const filteredProblems = $derived(
-    data.problems.filter((problem) => {
+    data.problems.filter((p) => {
       const search = query.trim().toLowerCase();
-      const matchesSearch =
-        !search ||
-        problem.title.toLowerCase().includes(search) ||
-        (problem.tags ?? []).some((tag) => tag.toLowerCase().includes(search));
-      return matchesSearch && (difficulty === 'all' || problem.difficulty === difficulty);
+      return (
+        (!search ||
+          p.title.toLowerCase().includes(search) ||
+          (p.tags ?? []).some((t) => t.toLowerCase().includes(search))) &&
+        (difficulty === 'all' || p.difficulty === difficulty) &&
+        (progress === 'all' || data.progress[p.id] === progress) &&
+        (view !== 'recommended' || data.progress[p.id] !== 'solved') &&
+        (view !== 'solved' || data.progress[p.id] === 'solved')
+      );
     }),
   );
 </script>
 
-<svelte:head>
-  <title>Home - happyjudge</title>
-</svelte:head>
+<svelte:head><title>Problem library - happyjudge</title></svelte:head>
 
-<section
-  class="overflow-hidden rounded-3xl bg-slate-950 px-6 py-8 text-white shadow-xl shadow-blue-950/10 sm:px-10 sm:py-10 dark:border dark:border-slate-800"
->
-  <div class="max-w-2xl">
-    <p class="text-xs font-bold tracking-widest text-blue-400 uppercase">Practice workspace</p>
-    <h1 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
-      Ready for your next challenge, {data.user.username}?
-    </h1>
-    <p class="mt-3 max-w-xl text-sm leading-6 text-slate-300 sm:text-base">
-      Sharpen your problem-solving skills with curated tasks, or compete against others in a timed contest.
+<section class="section-heading grid gap-8 pb-8 lg:grid-cols-[1fr_auto] lg:items-end">
+  <div>
+    <p class="eyebrow">The practice room</p>
+    <h1 class="mt-3 text-4xl sm:text-5xl">Good problems. Better thinking.</h1>
+    <p class="text-muted mt-4 max-w-xl text-sm leading-7">
+      Welcome back, {data.user.username}. Find your next problem, work through an idea, and make a little progress.
     </p>
-    <div class="mt-6 flex flex-wrap gap-3">
-      <a class="btn-primary" href="#problems">Browse problems</a>
-      <a
-        class="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
-        href="/contests">View contests <span aria-hidden="true">→</span></a
-      >
+  </div>
+  <div class="flex gap-8 border-l-2 border-blue-600 pl-6">
+    <div>
+      <p class="font-serif text-3xl">{solved}</p>
+      <p class="text-muted mt-1 text-xs">Solved</p>
+    </div>
+    <div>
+      <p class="font-serif text-3xl">{attempted}</p>
+      <p class="text-muted mt-1 text-xs">In progress</p>
+    </div>
+    <div>
+      <p class="font-serif text-3xl">{data.problems.length}</p>
+      <p class="text-muted mt-1 text-xs">In the library</p>
     </div>
   </div>
 </section>
 
-<section id="problems" class="scroll-mt-24 pt-10">
-  <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-    <div>
-      <p class="eyebrow">Problem library</p>
-      <h2 class="section-title mt-1">Recommended for you</h2>
-      <p class="text-muted mt-1 text-sm">
-        {data.problems.length} curated {data.problems.length === 1 ? 'problem' : 'problems'} available
-      </p>
+{#if continueProblems.length > 0}
+  <section class="mb-10" aria-labelledby="continue-title">
+    <div class="mb-4 flex items-end justify-between gap-4">
+      <div>
+        <p class="eyebrow">Pick up where you left off</p>
+        <h2 id="continue-title" class="mt-2 font-serif text-2xl">Continue solving</h2>
+      </div>
+      <a href="#library-title" class="text-sm font-semibold text-blue-700 hover:underline dark:text-blue-300"
+        >Browse all →</a
+      >
     </div>
-    <label class="relative block w-full sm:max-w-xs">
-      <span class="sr-only">Search problems</span>
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        class="pointer-events-none absolute top-3 left-3.5 size-5 text-slate-400"
-        aria-hidden="true"
-        ><circle cx="11" cy="11" r="7" stroke-width="1.8" /><path
-          d="m20 20-4-4"
-          stroke-width="1.8"
-          stroke-linecap="round"
-        /></svg
-      >
-      <input bind:value={query} class="form-input pl-11" type="search" placeholder="Search by title or tag" />
-    </label>
-  </div>
-
-  <div class="mt-5 flex gap-2 overflow-x-auto pb-2" aria-label="Filter by difficulty">
-    {#each difficulties as option}
-      <button
-        onclick={() => (difficulty = option)}
-        class="shrink-0 cursor-pointer rounded-full border px-3.5 py-1.5 text-sm font-semibold capitalize transition {difficulty ===
-        option
-          ? 'border-blue-600 bg-blue-600 text-white'
-          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'}"
-        >{option}</button
-      >
-    {/each}
-  </div>
-
-  <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-    {#each filteredProblems as problem}
-      <a
-        href={`/problem/${problem.id}`}
-        class="card group block p-0 transition duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-lg hover:shadow-slate-900/8 dark:hover:border-blue-700"
-      >
-        <div class="p-5">
-          <div class="flex items-start justify-between gap-4">
-            <div class="flex flex-wrap gap-2">
-              <span class="badge" data-difficulty={problem.difficulty}>{problem.difficulty}</span>
-              <span class="badge" data-progress={data.progress[problem.id]}>{data.progress[problem.id]}</span>
-            </div>
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              class="size-5 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-blue-600 dark:text-slate-600"
-              aria-hidden="true"
-              ><path d="M5 12h14m-5-5 5 5-5 5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg
+    <div class="grid gap-3 md:grid-cols-3">
+      {#each continueProblems as problem}
+        <a
+          href={`/problem/${problem.id}`}
+          class="card group border-l-4 border-l-amber-500 transition hover:-translate-y-0.5 hover:border-blue-400"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <span class="badge" data-progress="attempted">In progress</span><span class="text-muted text-xs"
+              >{problem.difficulty}</span
             >
           </div>
-          <h3
-            class="mt-4 text-lg font-bold tracking-tight text-slate-900 group-hover:text-blue-700 dark:text-white dark:group-hover:text-blue-400"
-          >
+          <h3 class="mt-4 font-serif text-xl group-hover:text-blue-700 dark:group-hover:text-blue-300">
             {problem.title}
           </h3>
-          {#if (problem.tags ?? []).length > 0}
-            <div class="mt-3 flex flex-wrap gap-1.5">
-              {#each problem.tags.slice(0, 3) as tag}
-                <span class="text-xs font-medium text-slate-500 dark:text-slate-400">#{tag}</span>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </a>
-    {:else}
-      <div class="card py-12 text-center sm:col-span-2 lg:col-span-3">
-        <p class="font-semibold">No matching problems</p>
-        <p class="text-muted mt-1 text-sm">Try a different search term or difficulty.</p>
-        {#if query || difficulty !== 'all'}<button
-            class="btn-ghost mt-4"
-            onclick={() => {
-              query = '';
-              difficulty = 'all';
-            }}>Clear filters</button
-          >{/if}
+          <p class="text-muted mt-3 text-xs">Return to your solution <span aria-hidden="true">→</span></p>
+        </a>
+      {/each}
+    </div>
+  </section>
+{/if}
+
+<div class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_240px]">
+  <section class="min-w-0" aria-labelledby="library-title">
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <h2 id="library-title" class="section-title">Problem library</h2>
+        <p class="text-muted mt-1 text-xs">{filteredProblems.length} of {data.problems.length} problems</p>
       </div>
-    {/each}
-  </div>
-</section>
+      <label class="w-full sm:w-72"
+        ><span class="sr-only">Search by title or tag</span><input
+          bind:value={query}
+          type="search"
+          class="form-input"
+          placeholder="Search by title or tag…"
+        /></label
+      >
+    </div>
+    <div
+      class="mt-5 flex flex-wrap items-center gap-1 border-b border-slate-200 pb-2 dark:border-slate-800"
+      role="tablist"
+      aria-label="Problem views"
+    >
+      <button
+        type="button"
+        class="filter-tab"
+        role="tab"
+        aria-selected={view === 'recommended'}
+        onclick={() => (view = 'recommended')}>Recommended</button
+      >
+      <button type="button" class="filter-tab" role="tab" aria-selected={view === 'all'} onclick={() => (view = 'all')}
+        >All problems</button
+      >
+      <button
+        type="button"
+        class="filter-tab"
+        role="tab"
+        aria-selected={view === 'solved'}
+        onclick={() => (view = 'solved')}>Solved</button
+      >
+      <span class="text-muted ml-auto hidden text-xs sm:inline"
+        >Use <kbd class="font-mono">/</kbd> for quick navigation</span
+      >
+    </div>
+    <div class="my-5 flex flex-wrap gap-1" aria-label="Filter by difficulty">
+      {#each difficulties as option}<button
+          class="filter-tab"
+          aria-pressed={difficulty === option}
+          onclick={() => (difficulty = option)}>{option === 'all' ? 'All difficulties' : option}</button
+        >{/each}
+    </div>
+    <div class="card overflow-x-auto p-0">
+      <table class="scoreboard">
+        <thead><tr><th class="w-14">#</th><th>Problem</th><th>Difficulty</th><th>Progress</th></tr></thead>
+        <tbody>
+          {#each filteredProblems as problem, i}
+            <tr class="group hover:bg-slate-50 dark:hover:bg-slate-800/50">
+              <td class="text-muted font-mono text-xs">{String(i + 1).padStart(2, '0')}</td>
+              <td
+                ><a class="font-semibold hover:text-blue-600 hover:underline" href={`/problem/${problem.id}`}
+                  >{problem.title}</a
+                >
+                {#if problem.tags?.length}<p class="text-muted mt-1 text-xs">{problem.tags.join(' · ')}</p>{/if}
+              </td>
+              <td><Difficulty difficulty={problem.difficulty} /></td>
+              <td
+                ><span class="badge whitespace-nowrap" data-progress={data.progress[problem.id]}
+                  >{data.progress[problem.id]}</span
+                ></td
+              >
+            </tr>
+          {:else}
+            <tr
+              ><td colspan="4" class="py-12 text-center"
+                ><p class="font-semibold">No matching problems</p>
+                <p class="text-muted mt-2 text-sm">Try another title, tag, or filter.</p>
+                <button
+                  class="btn-ghost mt-4"
+                  onclick={() => {
+                    query = '';
+                    difficulty = 'all';
+                    progress = 'all';
+                  }}>Reset filters</button
+                ></td
+              ></tr
+            >
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <aside class="space-y-7 lg:border-l lg:border-slate-200 lg:pl-7 dark:lg:border-slate-800">
+    <section>
+      <p class="eyebrow mb-3">Your practice</p>
+      <label class="form-label" for="progress">Problem progress</label><select
+        id="progress"
+        class="form-input"
+        bind:value={progress}
+        ><option value="all">All problems</option><option value="unattempted">Not started</option><option
+          value="attempted">In progress</option
+        ><option value="solved">Solved</option></select
+      >
+    </section>
+    <section class="border-t border-slate-200 pt-6 dark:border-slate-800">
+      <p class="eyebrow">Put it into practice</p>
+      <h2 class="mt-3 font-serif text-2xl">A different kind of challenge.</h2>
+      <p class="text-muted mt-3 text-sm leading-6">
+        Test your ideas against the clock. Explore public contests or join one with an invitation.
+      </p>
+      <a href="/contests" class="mt-4 inline-flex text-sm font-semibold text-blue-700 dark:text-blue-300"
+        >Explore contests <span class="ml-2" aria-hidden="true">→</span></a
+      >
+    </section>
+    <a href="/submissions" class="text-muted block text-sm hover:underline">Review your submissions →</a>
+  </aside>
+</div>

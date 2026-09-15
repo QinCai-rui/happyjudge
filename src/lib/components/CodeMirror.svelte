@@ -35,4 +35,4 @@
   });
 </script>
 
-<div bind:this={divEl}></div>
+<div class="code-editor" class:editable={!readOnly} bind:this={divEl}></div>

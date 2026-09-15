@@ -1,8 +1,14 @@
 <script lang="ts">
+  import AuthorSteps from '$lib/components/AuthorSteps.svelte';
+  import StatementEditor from '$lib/components/StatementEditor.svelte';
   import type { ActionData, PageServerData } from './$types';
 
   let { data, form }: { data: PageServerData; form: ActionData } = $props();
   const p = $derived(data.problem);
+  let statement = $state('');
+  $effect(() => {
+    statement = p.statement;
+  });
 </script>
 
 <svelte:head>
@@ -10,6 +16,7 @@
 </svelte:head>
 
 <div class="mx-auto max-w-3xl">
+  <p class="eyebrow mb-3">The author's desk</p>
   <div class="flex flex-wrap items-center justify-between gap-3">
     <h1 class="text-3xl font-bold tracking-tight">Edit problem</h1>
     <div class="flex gap-2 text-sm">
@@ -18,6 +25,7 @@
     </div>
   </div>
 
+  <AuthorSteps problemId={p.id} />
   <form method="POST" action="?/save" class="card mt-6 space-y-4">
     <div>
       <label class="form-label" for="title">Title</label>
@@ -60,8 +68,8 @@
       </div>
     </div>
     <div>
-      <label class="form-label" for="statement">Statement (markdown)</label>
-      <textarea class="form-input font-mono" id="statement" name="statement" rows="12" required>{p.statement}</textarea>
+      <label class="form-label" for="statement">Statement</label>
+      <StatementEditor bind:value={statement} rows={16} />
     </div>
     <div>
       <label class="form-label" for="samples">Sample testcases (JSON)</label>

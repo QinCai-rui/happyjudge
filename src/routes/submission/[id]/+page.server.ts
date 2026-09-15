@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { assertUserExists } from '$lib/server/assertion';
 import { verdictToHumanName } from '$lib/utils';
 import { getLanguages } from '$lib/server/codefort';
+import { getDisplaySubmissionScores } from '$lib/server/submissions';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
   assertUserExists(locals.auth);
@@ -21,6 +22,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
   if (!submission) error(404, 'Not found');
   if (submission.userId !== locals.auth.user.id && !locals.auth.user.canAdmin) error(404, 'Not found');
+  const displayScore = (await getDisplaySubmissionScores([submission])).get(submission.id);
 
   let languageName = submission.language;
   try {
@@ -41,8 +43,10 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       language: languageName,
       submittedAt: submission.submittedAt,
       scoringVersion: submission.scoringVersion,
+      score: displayScore?.total ?? 0,
+      scoreMaximum: displayScore?.maximum ?? 0,
       results: await Promise.all(
-        submission.results.map(async (x) => ({
+        (displayScore?.results ?? submission.results).map(async (x) => ({
           caseGroup: x.caseGroup,
           id: x.id,
           memoryUsed: x.memoryUsed,

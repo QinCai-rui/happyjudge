@@ -2,6 +2,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { api, apiData, ApiError, pathParam, requireUser, serializeProblem } from '$lib/server/api';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
+import { getDisplaySubmissionScores } from '$lib/server/submissions';
 
 export const GET = (event) =>
   api(async (event) => {
@@ -14,6 +15,7 @@ export const GET = (event) =>
     });
     if (!submission || (submission.userId !== user.id && !user.canAdmin))
       throw new ApiError(404, 'Submission not found', 'not_found');
+    const displayScore = (await getDisplaySubmissionScores([submission])).get(submission.id);
     const testcaseIds = submission.results.map((result) => result.id).filter((resultId) => resultId > 0);
     const testcases = testcaseIds.length
       ? await db.query.testcase.findMany({ where: inArray(table.testcase.id, testcaseIds) })
@@ -28,7 +30,9 @@ export const GET = (event) =>
       language: submission.language,
       submittedAt: submission.submittedAt,
       scoringVersion: submission.scoringVersion,
-      results: submission.results.map((result) => ({
+      score: displayScore?.total ?? 0,
+      scoreMaximum: displayScore?.maximum ?? 0,
+      results: (displayScore?.results ?? submission.results).map((result) => ({
         ...result,
         output: (hiddenById.get(result.id) ?? true) ? null : result.output,
       })),

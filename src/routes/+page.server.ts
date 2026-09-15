@@ -24,7 +24,7 @@ export const load: PageServerLoad = async ({ locals }) => {
             problems.map((problem) => problem.id),
           ),
         ),
-        columns: { problemId: true, results: true },
+        columns: { id: true, problemId: true, results: true, submittedAt: true },
       })
     : [];
 
@@ -38,7 +38,13 @@ export const load: PageServerLoad = async ({ locals }) => {
     }),
   );
 
-  return { user: locals.auth.user, problems, progress };
+  const recentProblemIds = [...attempts]
+    .sort((a, b) => +b.submittedAt - +a.submittedAt || b.id - a.id)
+    .map((attempt) => attempt.problemId)
+    .filter((id, index, all) => all.indexOf(id) === index)
+    .slice(0, 4);
+
+  return { user: locals.auth.user, problems, progress, recentProblemIds };
 };
 
 export const actions: Actions = {

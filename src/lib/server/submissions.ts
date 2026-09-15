@@ -1,6 +1,6 @@
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
-import { and, eq, lt } from 'drizzle-orm';
+import { and, eq, inArray, lt } from 'drizzle-orm';
 import PQueue from 'p-queue';
 import { execute, type CodefortResult } from './codefort';
 
@@ -21,6 +21,63 @@ export function getSubmissionQueueDepth(): number {
 
 export function isSubmissionQueueFull(): boolean {
   return getSubmissionQueueDepth() >= MAX_PENDING_JOBS;
+}
+
+type SubmissionForDisplay = Pick<
+  table.Submission,
+  'id' | 'problemId' | 'contestId' | 'results' | 'scoreNormalizationTotal'
+>;
+
+export type DisplaySubmissionScore = {
+  total: number;
+  maximum: number;
+  results: Array<table.Result & { score: number }>;
+};
+
+/** Convert internal testcase weights to participant-facing points. */
+export async function getDisplaySubmissionScores(
+  submissions: SubmissionForDisplay[],
+): Promise<Map<number, DisplaySubmissionScore>> {
+  if (!submissions.length) return new Map();
+
+  const contestIds = [...new Set(submissions.flatMap((submission) => (submission.contestId ? [submission.contestId] : [])))];
+  const problemIds = [...new Set(submissions.map((submission) => submission.problemId))];
+  const [links, testcases] = await Promise.all([
+    contestIds.length
+      ? db.query.contestProblem.findMany({ where: inArray(table.contestProblem.contestId, contestIds) })
+      : [],
+    db.query.testcase.findMany({ where: inArray(table.testcase.problemId, problemIds) }),
+  ]);
+  const pointsByContestProblem = new Map(
+    links.map((link) => [`${link.contestId}\0${link.problemId}`, link.points]),
+  );
+  const weightByProblem = new Map<string, number>();
+  for (const testcase of testcases) {
+    weightByProblem.set(testcase.problemId, (weightByProblem.get(testcase.problemId) ?? 0) + testcase.weight);
+  }
+  const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
+  return new Map(
+    submissions.map((submission) => {
+      const denominator = submission.scoreNormalizationTotal ?? weightByProblem.get(submission.problemId) ?? 1;
+      const maximum = submission.contestId
+        ? (pointsByContestProblem.get(`${submission.contestId}\0${submission.problemId}`) ?? 0)
+        : 100;
+      const scale = denominator > 0 ? maximum / denominator : 0;
+      const rawTotal = submission.results.reduce((total, result) => total + result.score, 0);
+      return [
+        submission.id,
+        {
+          total: round2(Math.min(maximum, Math.max(0, rawTotal * scale))),
+          maximum,
+          results: submission.results.map((result) => ({
+            ...result,
+            score: round2(Math.min(maximum, Math.max(0, result.score * scale))),
+          })),
+        },
+      ];
+    }),
+  );
 }
 
 export async function runCustomInput(

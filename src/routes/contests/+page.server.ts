@@ -4,7 +4,7 @@ import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { desc, eq, inArray } from 'drizzle-orm';
 import { assertUserExists } from '$lib/server/assertion';
-import { contestStatus, generateContestId, generateInviteToken } from '$lib/server/contests';
+import { contestStatus, generateContestId, generateInviteToken, parseUtcDateTime } from '$lib/server/contests';
 
 export const load: PageServerLoad = async ({ locals }) => {
   assertUserExists(locals.auth);
@@ -45,12 +45,12 @@ export const actions = {
     const data = await request.formData();
     const title = (data.get('title')?.toString() ?? '').trim();
     const description = (data.get('description')?.toString() ?? '').trim().slice(0, 4000);
-    const startsAt = new Date(data.get('startsAt')?.toString() ?? '');
-    const endsAt = new Date(data.get('endsAt')?.toString() ?? '');
+    const startsAt = parseUtcDateTime(data.get('startsAt')?.toString() ?? '');
+    const endsAt = parseUtcDateTime(data.get('endsAt')?.toString() ?? '');
     const releaseOnEnd = data.get('releaseOnEnd') === 'on';
     const isPublic = data.get('isPublic') === 'on';
     if (title.length < 3 || title.length > 120) return fail(400, { message: 'Title 3–120 chars' });
-    if (isNaN(+startsAt) || isNaN(+endsAt)) return fail(400, { message: 'Invalid dates' });
+    if (!startsAt || !endsAt) return fail(400, { message: 'Enter valid start and end times' });
     if (+endsAt <= +startsAt) return fail(400, { message: 'End must be after start' });
     const id = generateContestId();
     await db.insert(table.contest).values({

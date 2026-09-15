@@ -6,7 +6,7 @@ import { and, eq } from 'drizzle-orm';
 import { assertUserExists } from '$lib/server/assertion';
 import { getLanguages } from '$lib/server/codefort';
 import createSubmission, { MAX_CODE_BYTES, MAX_STDIN_BYTES, runCustomInput } from '$lib/server/submissions';
-import { canViewContest, contestStatus } from '$lib/server/contests';
+import { canViewContest, contestStatus, maybeReleaseContest } from '$lib/server/contests';
 import {
   checkRateLimit,
   CUSTOM_RUN_RATE_LIMIT,
@@ -21,13 +21,20 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   if (!contest) error(404, 'Not found');
   if (!(await canViewContest(contest, locals.auth.user, params.id))) error(404, 'Not found');
 
+  await maybeReleaseContest(contest);
   const status = contestStatus(contest);
   const link = await db.query.contestProblem.findFirst({
     where: and(eq(table.contestProblem.contestId, params.id), eq(table.contestProblem.problemId, params.pid)),
     with: { problem: true },
   });
   if (!link?.problem) error(404, 'Not found');
-  if (status !== 'live') error(403, status === 'upcoming' ? 'Contest has not started' : 'Contest has ended');
+  if (status === 'upcoming') error(403, 'Contest has not started');
+
+  const contestLinks = await db.query.contestProblem.findMany({
+    where: eq(table.contestProblem.contestId, params.id),
+    with: { problem: true },
+  });
+  contestLinks.sort((a, b) => a.position - b.position);
 
   let languages: { id: string; name: string }[] = [];
   try {
@@ -36,7 +43,18 @@ export const load: PageServerLoad = async ({ params, locals }) => {
     console.error('Failed to load Codefort languages:', e);
     error(503, 'Execution service unavailable');
   }
-  return { contest: { ...contest, status }, problem: link.problem, points: link.points, languages };
+  return {
+    contest: { ...contest, status },
+    problem: link.problem,
+    points: link.points,
+    languages,
+    contestProblems: contestLinks.map((item) => ({
+      id: item.problemId,
+      title: item.problem?.title ?? item.problemId,
+      points: item.points,
+      position: item.position,
+    })),
+  };
 };
 
 export const actions = {

@@ -1,4 +1,4 @@
-import { error } from '@sveltejs/kit';
+import { error, fail } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { assertUserExists } from '$lib/server/assertion';
 import {
   canViewContest,
+  computeScoreboard,
   contestStatus,
   isContestManager,
   isContestParticipant,
@@ -14,6 +15,7 @@ import {
 
 export const load: PageServerLoad = async ({ params, locals }) => {
   assertUserExists(locals.auth);
+  const user = locals.auth.user;
   const contest = await db.query.contest.findFirst({ where: eq(table.contest.id, params.id) });
   if (!contest) error(404, 'Not found');
   if (!(await canViewContest(contest, locals.auth.user, params.id))) error(404, 'Not found');
@@ -36,6 +38,21 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   // Problems hidden before start for non-managers.
   const problems = links.map((l) => l.problem);
 
+  const board = await computeScoreboard(params.id, manager);
+  const currentRow = board.rows.find((row) => row.userId === user.id);
+  const problemProgress = Object.fromEntries(
+    links.map((link) => {
+      const cell = currentRow?.cells.find((candidate) => candidate.problemId === link.problemId);
+      return [
+        link.problemId,
+        {
+          state: !cell?.isAttempted ? 'unattempted' : cell.isFull ? 'solved' : 'attempted',
+          score: cell?.score ?? 0,
+        },
+      ];
+    }),
+  );
+
   const participants = await db.query.contestParticipant.findMany({
     where: eq(table.contestParticipant.contestId, params.id),
   });
@@ -44,6 +61,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
     contest: { ...contest, status },
     problems,
     pointsByProblem: Object.fromEntries(links.map((l) => [l.problemId, l.points])),
+    problemProgress,
     participantCount: participants.length,
     isManager: manager,
     isParticipant,
@@ -56,6 +74,7 @@ export const actions = {
     const contest = await db.query.contest.findFirst({ where: eq(table.contest.id, params.id) });
     if (!contest) error(404, 'Not found');
     if (!contest.isPublic || contest.authorId === locals.auth.user.id) error(404, 'Not found');
+    if (contestStatus(contest) === 'ended') return fail(409, { message: 'This contest has already ended.' });
     await db
       .insert(table.contestParticipant)
       .values({ contestId: contest.id, userId: locals.auth.user.id })

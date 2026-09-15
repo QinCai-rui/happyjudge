@@ -3,6 +3,7 @@ import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { assertUserExists } from '$lib/server/assertion';
 import { verdictToHumanName } from '$lib/utils';
+import { getDisplaySubmissionScores } from '$lib/server/submissions';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -14,6 +15,7 @@ export const load: PageServerLoad = async ({ locals }) => {
     orderBy: [desc(table.submission.submittedAt), desc(table.submission.id)],
     limit: 100,
   });
+  const displayScores = await getDisplaySubmissionScores(submissions);
 
   return {
     submissions: submissions.map((submission) => {
@@ -36,7 +38,8 @@ export const load: PageServerLoad = async ({ locals }) => {
             : firstFailure
               ? verdictToHumanName(firstFailure.verdict)
               : 'Finished',
-        score: submission.results.reduce((total, result) => total + result.score, 0),
+        score: displayScores.get(submission.id)?.total ?? 0,
+        scoreMaximum: displayScores.get(submission.id)?.maximum ?? 0,
       };
     }),
   };

@@ -1,5 +1,4 @@
 import { and, desc, eq } from 'drizzle-orm';
-import { slugifyProblemId } from '$lib/server/contests';
 import {
   api,
   apiData,
@@ -48,9 +47,7 @@ export const POST = (event) =>
         ?.map((tag) => tag.trim().slice(0, 24))
         .filter(Boolean)
         .slice(0, 12) ?? [];
-    const id = slugifyProblemId(title);
-    const problem = {
-      id,
+    const values = {
       title,
       statement: String(body.statement).replace(/\r\n|\r/g, '\n'),
       difficulty: body.difficulty as table.DifficultyEnum[number],
@@ -63,6 +60,7 @@ export const POST = (event) =>
       displayGroup: body.displayGroup ? String(body.displayGroup).trim().slice(0, 120) : null,
       isPublic: Boolean(body.isPublic ?? true),
     };
-    await db.insert(table.problem).values(problem);
-    return apiData(serializeProblem({ ...problem, createdAt: new Date() }), 201);
+    const [problem] = await db.insert(table.problem).values(values).returning();
+    if (!problem) throw new Error('Unable to create problem');
+    return apiData(serializeProblem(problem), 201);
   }, event);

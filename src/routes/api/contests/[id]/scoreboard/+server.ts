@@ -7,7 +7,7 @@ export const GET = (event) =>
     const user = await requireContestViewer(event, contest);
     await maybeReleaseContest(contest);
     const board = await computeScoreboard(contest.id, await isContestManager(contest, user));
-    return apiData({
+    const response = apiData({
       contest: serializeContest(contest),
       problems: board.problems.map((link) => ({
         problemId: link.problemId,
@@ -17,4 +17,6 @@ export const GET = (event) =>
       })),
       rows: board.rows,
     });
+    response.headers.set('cache-control', 'no-store');
+    return response;
   }, event);

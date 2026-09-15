@@ -1,7 +1,10 @@
 <script lang="ts">
+  import AuthorSteps from '$lib/components/AuthorSteps.svelte';
+  import StatementEditor from '$lib/components/StatementEditor.svelte';
   import type { ActionData, PageServerData } from './$types';
 
   let { data, form }: { data: PageServerData; form: ActionData } = $props();
+  let statement = $state('');
 </script>
 
 <svelte:head>
@@ -9,13 +12,23 @@
 </svelte:head>
 
 <div class="mx-auto max-w-3xl">
-  <h1 class="text-3xl font-bold tracking-tight">Author a problem</h1>
+  <p class="eyebrow mb-3">The author's desk</p>
+  <h1 class="page-title">Author a problem</h1>
   <p class="text-muted mt-1 text-sm">Create a statement, then add hidden testcases on the next screen.</p>
+  <AuthorSteps />
 
   <form method="POST" action="?/create" class="card mt-6 space-y-4">
     <div>
       <label class="form-label" for="title">Title</label>
-      <input class="form-input" id="title" name="title" required minlength="3" maxlength="120" placeholder="Sum of Two Numbers" />
+      <input
+        class="form-input"
+        id="title"
+        name="title"
+        required
+        minlength="3"
+        maxlength="120"
+        placeholder="Sum of Two Numbers"
+      />
     </div>
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <div>
@@ -30,20 +43,40 @@
       </div>
       <div>
         <label class="form-label" for="timeLimit">Time limit (ms)</label>
-        <input class="form-input" id="timeLimit" name="timeLimit" type="number" value="1000" min="250" max="15000" required />
+        <input
+          class="form-input"
+          id="timeLimit"
+          name="timeLimit"
+          type="number"
+          value="1000"
+          min="250"
+          max="15000"
+          required
+        />
       </div>
       <div>
         <label class="form-label" for="memoryLimit">Memory (MB)</label>
-        <input class="form-input" id="memoryLimit" name="memoryLimit" type="number" value="256" min="16" max="2048" required />
+        <input
+          class="form-input"
+          id="memoryLimit"
+          name="memoryLimit"
+          type="number"
+          value="256"
+          min="16"
+          max="2048"
+          required
+        />
       </div>
     </div>
     <div>
-      <label class="form-label" for="statement">Statement (markdown, LaTeX supported)</label>
-      <textarea class="form-input font-mono" id="statement" name="statement" rows="10" required placeholder="Describe the problem…"></textarea>
+      <label class="form-label" for="statement">Statement</label>
+      <StatementEditor bind:value={statement} rows={14} />
     </div>
     <div>
       <label class="form-label" for="samples">Sample testcases (JSON)</label>
-      <textarea class="form-input font-mono" id="samples" name="samples" rows="3">{'[{"input":"","output":""}]'}</textarea>
+      <textarea class="form-input font-mono" id="samples" name="samples" rows="3"
+        >{'[{"input":"","output":""}]'}</textarea
+      >
     </div>
     <div>
       <label class="form-label" for="tags">Tags (comma separated)</label>
@@ -54,9 +87,13 @@
       <input class="form-input" id="displayGroup" name="displayGroup" placeholder="Week 1" />
     </div>
     <div class="flex flex-wrap gap-6">
-      <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="isPublic" checked class="checkbox" /> Public problem</label>
+      <label class="flex items-center gap-2 text-sm"
+        ><input type="checkbox" name="isPublic" checked class="checkbox" /> Public problem</label
+      >
       {#if data.user?.canAdmin}
-        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="homepage" class="checkbox" /> Show on homepage</label>
+        <label class="flex items-center gap-2 text-sm"
+          ><input type="checkbox" name="homepage" class="checkbox" /> Show on homepage</label
+        >
       {/if}
     </div>
     {#if form?.message}<p class="form-error">{form.message}</p>{/if}

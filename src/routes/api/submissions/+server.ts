@@ -3,6 +3,7 @@ import { api, apiData, requireUser } from '$lib/server/api';
 import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { verdictToHumanName } from '$lib/utils';
+import { getDisplaySubmissionScores } from '$lib/server/submissions';
 
 export const GET = (event) =>
   api(async (event) => {
@@ -21,6 +22,7 @@ export const GET = (event) =>
       orderBy: [desc(table.submission.submittedAt), desc(table.submission.id)],
       limit,
     });
+    const displayScores = await getDisplaySubmissionScores(submissions);
 
     return apiData(
       submissions.map((submission) => {
@@ -43,7 +45,8 @@ export const GET = (event) =>
               : firstFailure
                 ? verdictToHumanName(firstFailure.verdict)
                 : 'Finished',
-          score: submission.results.reduce((total, result) => total + result.score, 0),
+          score: displayScores.get(submission.id)?.total ?? 0,
+          scoreMaximum: displayScores.get(submission.id)?.maximum ?? 0,
         };
       }),
     );

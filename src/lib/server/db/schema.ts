@@ -1,4 +1,4 @@
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import { pgTable, pgEnum, text, timestamp, integer, serial, jsonb, boolean, primaryKey } from 'drizzle-orm/pg-core';
 
 export const user = pgTable('user', {
@@ -40,7 +40,9 @@ export const apiToken = pgTable('api_token', {
 export const difficultyEnum = pgEnum('difficulty', ['easy', 'medium', 'hard', 'expert', 'insane']);
 
 export const problem = pgTable('problem', {
-  id: text('id').primaryKey(),
+  id: text('id')
+    .primaryKey()
+    .default(sql`nextval('problem_id_seq')::text`),
   title: text('title').notNull(),
   statement: text('statement').notNull(),
   difficulty: difficultyEnum('difficulty').notNull(),

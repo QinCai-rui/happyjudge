@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AuthorSteps from '$lib/components/AuthorSteps.svelte';
   import type { ActionData, PageServerData } from './$types';
 
   let { data, form }: { data: PageServerData; form: ActionData } = $props();
@@ -9,6 +10,7 @@
 </svelte:head>
 
 <div class="mx-auto max-w-4xl">
+  <p class="eyebrow mb-3">The author's desk</p>
   <div class="flex flex-wrap items-center justify-between gap-3">
     <h1 class="text-3xl font-bold tracking-tight">Testcases · {data.problem.title}</h1>
     <a class="btn-ghost" href={`/create/problem/${data.problem.id}`}>← Back to problem</a>
@@ -17,6 +19,7 @@
     Testcases with the same group form one all-or-nothing subtask. Its points are the sum of its testcase weights.
     Hidden outputs never leave the server.
   </p>
+  <AuthorSteps problemId={data.problem.id} active="testcases" />
 
   {#if form?.message}<p class="mt-4 {form.success ? 'form-success' : 'form-error'}">{form.message}</p>{/if}
 

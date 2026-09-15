@@ -4,7 +4,6 @@ import { db } from '$lib/server/db';
 import * as table from '$lib/server/db/schema';
 import { desc, eq } from 'drizzle-orm';
 import { assertUserExists } from '$lib/server/assertion';
-import { slugifyProblemId } from '$lib/server/contests';
 import { parseSamples } from '$lib/server/validation';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -53,21 +52,23 @@ export const actions = {
       .filter(Boolean)
       .slice(0, 12);
 
-    const id = slugifyProblemId(title);
-    await db.insert(table.problem).values({
-      id: id as string,
-      title,
-      statement,
-      difficulty: difficulty as 'easy' | 'medium' | 'hard' | 'expert' | 'insane',
-      timeLimit,
-      memoryLimit,
-      sampleTestcases: samples,
-      authorId: locals.auth.user.id,
-      tags,
-      homepage: locals.auth.user.canAdmin ? homepage : false,
-      displayGroup,
-      isPublic: locals.auth.user.canAdmin ? isPublic : isPublic,
-    });
-    return redirect(303, `/create/problem/${id}`);
+    const [problem] = await db
+      .insert(table.problem)
+      .values({
+        title,
+        statement,
+        difficulty: difficulty as 'easy' | 'medium' | 'hard' | 'expert' | 'insane',
+        timeLimit,
+        memoryLimit,
+        sampleTestcases: samples,
+        authorId: locals.auth.user.id,
+        tags,
+        homepage: locals.auth.user.canAdmin ? homepage : false,
+        displayGroup,
+        isPublic: locals.auth.user.canAdmin ? isPublic : isPublic,
+      })
+      .returning({ id: table.problem.id });
+    if (!problem) error(500, 'Unable to create problem');
+    return redirect(303, `/create/problem/${problem.id}`);
   },
 } satisfies Actions;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import LocalTime from '$lib/components/LocalTime.svelte';
   import type { PageServerData } from './$types';
 
   let { data }: { data: PageServerData } = $props();
@@ -12,6 +13,10 @@
         (!query.trim() || submission.problemTitle.toLowerCase().includes(query.trim().toLowerCase())),
     ),
   );
+
+  function displayScore(submission: (typeof data.submissions)[number]): string {
+    return submission.contestId ? `${submission.score}/${submission.scoreMaximum}` : `${submission.score}%`;
+  }
 </script>
 
 <svelte:head>
@@ -19,7 +24,7 @@
 </svelte:head>
 
 <div class="mx-auto max-w-5xl">
-  <div class="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+  <div class="section-heading flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
     <div>
       <p class="eyebrow">Your activity</p>
       <h1 class="page-title mt-1">Submission history</h1>
@@ -33,12 +38,7 @@
 
   <div class="mt-6 flex gap-2 overflow-x-auto pb-2" aria-label="Filter submissions">
     {#each ['all', 'pending', 'accepted', 'failed'] as option}
-      <button
-        onclick={() => (status = option)}
-        class="shrink-0 cursor-pointer rounded-full border px-3.5 py-1.5 text-sm font-semibold capitalize transition {status ===
-        option
-          ? 'border-blue-600 bg-blue-600 text-white'
-          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'}"
+      <button onclick={() => (status = option)} class="filter-tab shrink-0" aria-pressed={status === option}
         >{option}</button
       >
     {/each}
@@ -62,12 +62,8 @@
               </td>
               <td><span class="badge" data-verdict={submission.state}>{submission.verdict}</span></td>
               <td class="whitespace-nowrap">{submission.language}</td>
-              <td class="font-mono font-semibold">{submission.score}</td>
-              <td class="text-muted whitespace-nowrap"
-                ><time datetime={String(submission.submittedAt)}
-                  >{new Date(submission.submittedAt).toLocaleString()}</time
-                ></td
-              >
+              <td class="font-mono font-semibold">{displayScore(submission)}</td>
+              <td class="text-muted whitespace-nowrap"><LocalTime value={submission.submittedAt} /></td>
             </tr>
           {/each}
         </tbody>

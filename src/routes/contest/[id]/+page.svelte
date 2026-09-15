@@ -1,9 +1,10 @@
 <script lang="ts">
+  import LocalTime from '$lib/components/LocalTime.svelte';
   import { onMount } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import type { PageServerData } from './$types';
 
-  let { data }: { data: PageServerData } = $props();
+  let { data, form }: { data: PageServerData; form: import('./$types').ActionData } = $props();
   const c = $derived(data.contest);
   let now = $state(Date.now());
 
@@ -30,6 +31,15 @@
   const countdown = $derived(
     `${Math.floor(diff / 3600000)}h ${Math.floor((diff % 3600000) / 60000)}m ${Math.floor((diff % 60000) / 1000)}s`,
   );
+  const solvedProblems = $derived(
+    data.problems.filter((problem) => data.problemProgress[problem.id]?.state === 'solved').length,
+  );
+  const attemptedProblems = $derived(
+    data.problems.filter((problem) => data.problemProgress[problem.id]?.state === 'attempted').length,
+  );
+  const score = $derived(
+    data.problems.reduce((total, problem) => total + (data.problemProgress[problem.id]?.score ?? 0), 0),
+  );
 </script>
 
 <svelte:head>
@@ -37,20 +47,21 @@
 </svelte:head>
 
 <div class="mx-auto max-w-4xl">
+  <a href="/contests" class="text-muted mb-6 inline-block text-xs hover:underline">← All contests</a>
   <div class="contest-banner" data-status={c.status}>
     {#if c.status === 'upcoming'}
-      ⏳ Starts <time datetime={String(c.startsAt)}>{new Date(c.startsAt).toLocaleString()}</time> ·
-      <span aria-live="polite">{countdown}</span>
+      Starts <LocalTime value={c.startsAt} /> ·
+      <span class="tabular font-mono">{countdown}</span>
     {:else if c.status === 'live'}
-      🟢 Live — ends <time datetime={String(c.endsAt)}>{new Date(c.endsAt).toLocaleString()}</time> ·
-      <span aria-live="polite">{countdown} left</span>
+      Live — ends <LocalTime value={c.endsAt} /> ·
+      <span class="tabular font-mono">{countdown} left</span>
     {:else}
-      🏁 Ended <time datetime={String(c.endsAt)}>{new Date(c.endsAt).toLocaleString()}</time>
+      Ended <LocalTime value={c.endsAt} />
     {/if}
     <span class="badge ml-2" data-status={c.status}>{c.status}</span>
   </div>
 
-  <h1 class="mt-4 text-3xl font-bold tracking-tight">{c.title}</h1>
+  <h1 class="page-title mt-8">{c.title}</h1>
   {#if c.description}<p class="text-muted mt-2 max-w-prose whitespace-pre-wrap">{c.description}</p>{/if}
   <p class="text-muted mt-2 text-sm">
     {data.participantCount} participant(s) · {c.isPublic ? 'public' : 'private invite-only'} · all-or-nothing subtasks ·
@@ -59,25 +70,47 @@
 
   <div class="mt-4 flex flex-wrap gap-2">
     <a class="btn-primary" href={`/contest/${c.id}/scoreboard`}>Scoreboard</a>
-    {#if c.isPublic && !data.isManager && !data.isParticipant}
+    {#if c.isPublic && c.status !== 'ended' && !data.isManager && !data.isParticipant}
       <form method="POST" action="?/join"><button class="btn-primary">Join contest</button></form>
     {/if}
     {#if data.isManager}
       <a class="btn-ghost" href={`/contest/${c.id}/manage`}>Manage</a>
     {/if}
   </div>
+  {#if form?.message}<p class="form-error mt-3" role="alert">{form.message}</p>{/if}
 
-  <h2 class="mt-8 text-xl font-semibold">Problems</h2>
+  <div class="mt-8 grid grid-cols-3 gap-2 border-y border-slate-200 py-5 dark:border-slate-800">
+    <div>
+      <p class="font-serif text-2xl">{solvedProblems}<span class="text-muted text-sm">/{data.problems.length}</span></p>
+      <p class="text-muted mt-1 text-xs">Solved</p>
+    </div>
+    <div>
+      <p class="font-serif text-2xl">{score}</p>
+      <p class="text-muted mt-1 text-xs">Your score</p>
+    </div>
+    <div>
+      <p class="font-serif text-2xl">{attemptedProblems}</p>
+      <p class="text-muted mt-1 text-xs">In progress</p>
+    </div>
+  </div>
+
+  <h2 class="section-heading mt-8 text-xl font-semibold">Contest problems</h2>
   {#if c.status === 'upcoming' && !data.isManager}
     <p class="text-muted mt-2 text-sm italic">Problems unlock when the contest starts.</p>
   {:else}
     <ul class="mt-3 space-y-2">
       {#each data.problems as p, i}
-        <li class="card flex items-center justify-between gap-3">
-          <a class="font-medium hover:underline" href={`/contest/${c.id}/problem/${p.id}`}>
-            {i + 1}. {p.title}
+        <li class="card flex flex-wrap items-center justify-between gap-3 transition hover:border-blue-300">
+          <a class="flex min-w-0 items-center font-medium hover:underline" href={`/contest/${c.id}/problem/${p.id}`}>
+            <span class="mr-4 font-mono text-blue-600 dark:text-blue-300">{String.fromCharCode(65 + i)}</span>
+            <span class="truncate">{p.title}</span>
           </a>
-          <span class="text-muted text-sm">{data.pointsByProblem[p.id] ?? 100} pts · {p.difficulty}</span>
+          <span class="flex items-center gap-3 text-sm">
+            <span class="badge" data-progress={data.problemProgress[p.id]?.state ?? 'unattempted'}
+              >{data.problemProgress[p.id]?.state ?? 'unattempted'}</span
+            >
+            <span class="text-muted">{data.problemProgress[p.id]?.score ?? 0}/{data.pointsByProblem[p.id] ?? 100}</span>
+          </span>
         </li>
       {:else}
         <li class="text-muted text-sm italic">No problems added yet.</li>
